@@ -200,6 +200,21 @@ pra produção com a conta PJ real. Não existe SDK Composer oficial
 mantido — a integração é via API REST (usar o Http client do próprio
 Laravel: Http::withToken(...)->post(...)).
 
+OBRIGATÓRIO — SOLICITAR O TOKEN AO USUÁRIO (mesmo padrão do Passo 0 da
+task-1): antes de implementar os commits 6-7 desta task, se for uma IA
+executando, ela deve PARAR e PERGUNTAR no terminal o Token de API do
+ambiente de testes, exibindo o pedido de forma clara pro usuário colar
+a resposta:
+
+  TOKEN DE API DO SANDBOX: _______________________________________
+  (copiado de https://portaldev.pagbank.com.br/tokens)
+
+A página de tokens mostra "E-mail" e "Token" — só o TOKEN é usado nas
+chamadas da API (Bearer). O e-mail é apenas o login da conta, não é
+credencial de API; e a chave pública do encryptCard não é copiada de
+lugar nenhum, é gerada via API com esse mesmo token (ver seção 5.3).
+Não prosseguir com o teste ponta a ponta do sandbox sem essa resposta.
+
 Passos desta fase:
   1. Criar conta de sandbox no PagBank seguindo o passo a passo oficial:
      https://developer.pagbank.com.br/docs/crie-sua-conta-pagbank#sandbox
