@@ -194,5 +194,9 @@ return [
     |
     */
 
-    'console' => false,
+    // Auditável também em console: os testes (PHPUnit roda em console)
+    // precisam verificar registros de auditoria (task-13, seção 2.8), e
+    // comandos agendados (ex: payouts:generate, task-9) também mexem em
+    // dados financeiros que devem ficar rastreáveis.
+    'console' => env('AUDITING_CONSOLE', true),
 ];
