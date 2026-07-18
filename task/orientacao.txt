@@ -199,6 +199,11 @@ REGRAS OBRIGATÓRIAS DE GIT (valem pra TODAS as tasks deste diretório):
      código quebrado só porque "a task ainda não terminou" quebra o
      propósito de ter commits pequenos e rastreáveis.
 
+  4. Mensagem de commit LIMPA, sem trailer de coautoria de IA: não
+     incluir "Co-Authored-By: Claude ..." (nem similar) no fim das
+     mensagens — só a mensagem do commit em si. (Regra adicionada em
+     2026-07-18; commits anteriores a ela ficam como estão.)
+
 RETOMANDO O TRABALHO ENTRE SESSÕES
 ----------------------------------------
 Este projeto (23 tasks, cada uma com várias migrations/controllers/
