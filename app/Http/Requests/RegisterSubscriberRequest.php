@@ -25,6 +25,9 @@ class RegisterSubscriberRequest extends FormRequest
             // fiscal por CPF; não bloquear cadastro por causa disso agora.
             'cpf' => ['nullable', 'string', 'max:14', 'unique:users,cpf'],
             'password' => ['required', 'confirmed', Password::defaults()],
+            // Opcional — código inválido não bloqueia o resto do
+            // cadastro (task-16, seção 2, passo 2).
+            'referral_code' => ['nullable', 'string', 'max:8'],
         ];
     }
 }

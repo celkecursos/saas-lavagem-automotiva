@@ -13,6 +13,8 @@
                 <x-form-field label="E-mail" name="email" type="email" :value="old('email')" required />
                 <x-form-field label="Telefone" name="phone" :value="old('phone')" required />
                 <x-form-field label="CPF (opcional)" name="cpf" :value="old('cpf')" />
+                <x-form-field label="Código de indicação (opcional)" name="referral_code"
+                              :value="old('referral_code', $referralCode ?? null)" />
                 <x-form-field label="Senha" name="password" type="password" required />
                 <x-form-field label="Confirmar senha" name="password_confirmation" type="password" required />
                 <button type="submit" class="btn-primary w-full">Criar conta</button>

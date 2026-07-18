@@ -3,6 +3,7 @@
 namespace App\Services\Subscription;
 
 use App\Models\Order;
+use App\Models\ReferralReward;
 use App\Models\Subscription;
 use App\Models\SubscriptionCycle;
 use App\Notifications\SubscriptionConfirmed;
@@ -49,6 +50,32 @@ class SubscriptionActivator
         ]);
 
         $subscription->user->notify(new SubscriptionConfirmed($subscription->fresh()));
+
+        static::qualifyReferral($subscription);
+    }
+
+    /**
+     * Quando a subscription do INDICADO vira 'active' pela PRIMEIRA vez
+     * (exige pagamento confirmado, não só cadastro — evita conta fake
+     * gerando bônus sem virar cliente de verdade), task-16, seção 2,
+     * passo 3.
+     */
+    private static function qualifyReferral(Subscription $subscription): void
+    {
+        // "Pela primeira vez": se já existe outra subscription ativa
+        // anterior deste user, não é a primeira confirmação.
+        $isFirstActivation = Subscription::where('user_id', $subscription->user_id)
+            ->where('status', 'active')
+            ->where('id', '!=', $subscription->id)
+            ->doesntExist();
+
+        if (! $isFirstActivation) {
+            return;
+        }
+
+        ReferralReward::where('referred_user_id', $subscription->user_id)
+            ->where('status', 'pending')
+            ->update(['status' => 'qualified', 'qualified_at' => now()]);
     }
 
     public static function nextPeriodEnd(string $quotaPeriod, ?\Illuminate\Support\Carbon $from = null)
