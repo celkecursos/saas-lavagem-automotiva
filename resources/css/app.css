@@ -3,7 +3,32 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/* Dark mode por classe "dark" no <html> (toggle na task-18), em vez do
+   padrão prefers-color-scheme do Tailwind v4. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Paleta reaproveitada do projeto adm (task-6, seção 3) — no adm era
+       theme.extend.colors do tailwind.config.js (Tailwind v3); aqui vira
+       @theme porque o Tailwind v4 é configurado no próprio CSS. Nomes
+       mantidos idênticos pra consistência entre os sistemas Celke. */
+    --color-background: #080838;        /* fundo geral escuro / item ativo do menu */
+    --color-backgroundsecond: #04041d;  /* navbar / sidebar */
+    --color-backgroundthird: #151541;
+    --color-backgroundfourth: #000011;
+    --color-backgroundfifth: #000022;
+    --color-colortext: #003ae9;
+    --color-colortextsecond: #0d47f8;
+
+    /* Variante dark mode (classe "dark" no <html>). */
+    --color-backgrounddark: #000000;
+    --color-backgroundseconddark: #0c0d0d;
+    --color-backgroundthirddark: #0e0f0f;
+    --color-backgroundfourthdark: #161717;
+    --color-backgroundfifthdark: #252525;
+    --color-colortextdark: #003ae9;
+    --color-colortextseconddark: #0d47f8;
 }
