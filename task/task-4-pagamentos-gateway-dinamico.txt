@@ -347,7 +347,7 @@ tela em si que MOSTRA o formulário de cartão antes disso. Corrigido:
     - Ao submeter, o JS da página chama PagSeguro.encryptCard() ANTES
       de qualquer requisição pro nosso backend:
         PagSeguro.encryptCard({
-          publicKey: '{{ chave pública do gateway ativo }}',
+          publicKey: '{{ chave pública obtida via API — ver item abaixo }}',
           holder, number, expMonth, expYear, securityCode
         })
       Isso roda 100% no browser (a doc do PagBank confirma: "não
@@ -361,10 +361,26 @@ tela em si que MOSTRA o formulário de cartão antes disso. Corrigido:
       com { plan_id, encrypted_card: <resultado do encryptCard()> } —
       o Controller usa esse valor direto como card.encrypted na
       chamada da seção 3 acima.
-    - A chave pública usada no JS é a mesma guardada em
-      payment_gateways.credentials do gateway ativo (task-4) —
-      exposta só a chave PÚBLICA na view (nunca o token/segredo da
-      API, que fica só no backend).
+    - A chave pública usada no JS NÃO é uma credencial copiada do
+      portal (CORREÇÃO 2026-07-18: a página de tokens do sandbox,
+      portaldev.pagbank.com.br/tokens, só mostra "E-mail" e "Token" —
+      não existe campo "chave pública" pra copiar). Ela é gerada/
+      consultada via API usando o próprio Bearer token:
+
+        GET  https://sandbox.api.pagseguro.com/public-keys/card
+             (consulta a chave já criada; 404 se ainda não existe)
+        POST https://sandbox.api.pagseguro.com/public-keys
+             corpo { "type": "card" }  (cria; 201 devolve public_key)
+        Authorization: Bearer {token}  nos dois casos.
+
+      O backend consulta primeiro (GET) e só cria (POST) se ainda não
+      existir — POST repetido pode rotacionar a chave à toa. Como ela
+      não muda a cada request, o backend guarda em cache e injeta só
+      ELA na view do checkout — nunca o token/segredo da API, que
+      fica só no backend. Portanto a ÚNICA credencial que o admin
+      cadastra em payment_gateways.credentials é o Token de API; o
+      e-mail exibido no portal é só o login da conta, não entra em
+      nenhuma chamada da API.
 
 Sem essa página, não existe como o usuário realmente pagar — este item
 era uma peça faltando entre a decisão (checkout_mode='embedded') e a
