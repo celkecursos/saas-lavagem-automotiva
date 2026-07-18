@@ -6,6 +6,9 @@ use App\Models\Order;
 use App\Models\PaymentMethodToken;
 use App\Models\Subscription;
 use App\Models\SubscriptionCycle;
+use App\Notifications\SubscriptionCanceled;
+use App\Notifications\SubscriptionRenewalFailed;
+use App\Notifications\SubscriptionRenewed;
 use App\Services\Payment\PaymentGatewayFactory;
 use Illuminate\Support\Carbon;
 
@@ -125,14 +128,22 @@ class SubscriptionRenewalService
             'quota_total' => $quotaTotal,
             'quota_used' => 0,
         ]);
+
+        $subscription->user->notify(new SubscriptionRenewed($subscription->fresh()));
     }
 
     private function handleFailure(Subscription $subscription): void
     {
         $graceDeadline = Carbon::parse($subscription->current_period_end)->addDays(self::GRACE_DAYS);
+        $canceled = now()->greaterThan($graceDeadline);
 
         $subscription->update([
-            'status' => now()->greaterThan($graceDeadline) ? 'canceled' : 'past_due',
+            'status' => $canceled ? 'canceled' : 'past_due',
+            'canceled_at' => $canceled ? now() : null,
         ]);
+
+        $subscription->user->notify(
+            $canceled ? new SubscriptionCanceled($subscription) : new SubscriptionRenewalFailed($subscription),
+        );
     }
 }

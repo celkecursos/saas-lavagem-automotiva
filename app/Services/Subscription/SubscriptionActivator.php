@@ -5,6 +5,7 @@ namespace App\Services\Subscription;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Models\SubscriptionCycle;
+use App\Notifications\SubscriptionConfirmed;
 
 /**
  * Ativa uma subscription a partir do 1º pagamento confirmado 'paid'
@@ -46,6 +47,8 @@ class SubscriptionActivator
             'quota_total' => $plan->wash_quota,
             'quota_used' => 0,
         ]);
+
+        $subscription->user->notify(new SubscriptionConfirmed($subscription->fresh()));
     }
 
     public static function nextPeriodEnd(string $quotaPeriod, ?\Illuminate\Support\Carbon $from = null)

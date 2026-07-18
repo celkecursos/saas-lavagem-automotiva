@@ -17,7 +17,7 @@
             <x-card :title="$subscription->plan->name">
                 <p class="text-sm mb-2">Status: <x-badge :status="$subscription->status" /></p>
 
-                @if ($subscription->status === 'active')
+                @if (in_array($subscription->status, ['active', 'past_due']))
                     <p class="text-sm text-gray-600 dark:text-gray-400">
                         Renova em {{ $subscription->current_period_end?->format('d/m/Y') }}
                     </p>
@@ -28,8 +28,29 @@
                             Cota do ciclo: {{ $cycle->quota_used }} / {{ $cycle->quota_total }}
                         </p>
                     @endif
+
+                    @if ($subscription->pendingPlan)
+                        <p class="text-sm text-gray-600 dark:text-gray-400">
+                            Troca agendada pra: <strong>{{ $subscription->pendingPlan->name }}</strong> (na próxima renovação)
+                        </p>
+                    @endif
+                @elseif ($subscription->status === 'canceled')
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                        Seu acesso permanece até {{ $subscription->current_period_end?->format('d/m/Y') }}.
+                    </p>
                 @endif
             </x-card>
+
+            @if ($subscription->status === 'active')
+                <div class="flex flex-wrap items-center gap-3 mt-4">
+                    <x-confirm-modal :action="route('subscription.cancel')"
+                                     title="Cancelar sua assinatura?"
+                                     message="Seu acesso continua até o fim do período já pago; a renovação futura não acontece mais."
+                                     confirm-label="Cancelar assinatura">
+                        <x-slot:trigger><button type="button" class="btn-danger">Cancelar assinatura</button></x-slot:trigger>
+                    </x-confirm-modal>
+                </div>
+            @endif
         @endif
     </div>
 @endsection

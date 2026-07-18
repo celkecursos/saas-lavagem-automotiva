@@ -82,9 +82,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/planos/{plan}/assinar', [CheckoutController::class, 'store'])
         ->name('plans.subscribe');
 
-    // Painel do assinante (task-7, seção 6).
+    // Painel do assinante (task-7, seções 5 e 6).
     Route::get('/assinatura', [SubscriptionController::class, 'show'])
         ->name('subscription.show');
+    Route::post('/assinatura/cancelar', [SubscriptionController::class, 'cancel'])
+        ->name('subscription.cancel');
+    Route::post('/assinatura/trocar-plano', [SubscriptionController::class, 'changePlan'])
+        ->name('subscription.change-plan');
 });
 
 // Webhook de pagamento — genérico por gateway (task-4/task-7, seção 3).
