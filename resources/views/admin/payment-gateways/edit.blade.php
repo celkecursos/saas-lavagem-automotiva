@@ -14,12 +14,11 @@
 
             <x-form-field label="Rótulo (opcional)" name="label" :value="old('label', $gateway->label)" />
 
-            {{-- Segredo nunca é pré-preenchido; em branco mantém o atual. --}}
+            {{-- Segredo nunca é pré-preenchido; em branco mantém o atual.
+                 A chave pública do encryptCard não é cadastrada — é obtida
+                 via API com o próprio token (task-4, seção 5.3). --}}
             <x-form-field label="Token da API (deixe em branco pra manter o atual)"
                           name="credentials.token" type="password" autocomplete="off" />
-
-            <x-form-field label="Chave pública (encryptCard)" name="credentials.public_key"
-                          :value="old('credentials.public_key', $gateway->credentials['public_key'] ?? '')" />
 
             <label class="flex items-center gap-2 mb-4 text-sm text-gray-700 dark:text-gray-300">
                 <input type="hidden" name="sandbox_mode" value="0">

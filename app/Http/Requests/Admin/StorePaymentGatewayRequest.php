@@ -18,11 +18,11 @@ class StorePaymentGatewayRequest extends FormRequest
             'payment_gateway_type_id' => ['required', 'integer', 'exists:payment_gateway_types,id'],
             'label' => ['nullable', 'string', 'max:255'],
             'sandbox_mode' => ['boolean'],
-            // Credenciais específicas do tipo (v1: PagSeguro — token de
-            // API + chave pública do encryptCard, ver task-4 seção 5.3).
+            // Única credencial necessária (v1: PagSeguro) é o Token de
+            // API — a chave pública do encryptCard é obtida via API com
+            // esse mesmo token, não é cadastrada (task-4, seção 5.3).
             'credentials' => ['required', 'array'],
             'credentials.token' => ['required', 'string'],
-            'credentials.public_key' => ['nullable', 'string'],
         ];
     }
 }

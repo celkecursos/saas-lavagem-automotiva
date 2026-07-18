@@ -20,7 +20,6 @@ class UpdatePaymentGatewayRequest extends FormRequest
             // pré-preenchido na tela, por ser segredo).
             'credentials' => ['nullable', 'array'],
             'credentials.token' => ['nullable', 'string'],
-            'credentials.public_key' => ['nullable', 'string'],
         ];
     }
 }

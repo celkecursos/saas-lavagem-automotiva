@@ -21,10 +21,9 @@
             <x-form-field label="Rótulo (opcional)" name="label" :value="old('label')"
                           placeholder="ex: PagSeguro - conta principal" />
 
+            {{-- Única credencial: a chave pública do encryptCard é obtida
+                 via API com esse mesmo token (task-4, seção 5.3). --}}
             <x-form-field label="Token da API" name="credentials.token" type="password" autocomplete="off" />
-
-            <x-form-field label="Chave pública (encryptCard)" name="credentials.public_key"
-                          :value="old('credentials.public_key')" />
 
             <label class="flex items-center gap-2 mb-4 text-sm text-gray-700 dark:text-gray-300">
                 <input type="hidden" name="sandbox_mode" value="0">

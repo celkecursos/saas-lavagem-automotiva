@@ -40,7 +40,7 @@ test('admin com permission lista e cria gateway', function () {
         'payment_gateway_type_id' => $type->id,
         'label' => 'PagSeguro - testes',
         'sandbox_mode' => '1',
-        'credentials' => ['token' => 'tok-123', 'public_key' => 'PUB-123'],
+        'credentials' => ['token' => 'tok-123'],
     ])->assertRedirect(route('payment-gateways.index'));
 
     $gateway = PaymentGateway::first();
@@ -75,13 +75,13 @@ test('update com token em branco mantem as credenciais atuais', function () {
     $this->seed(DatabaseSeeder::class);
     $admin = makeGatewayAdmin();
     $gateway = PaymentGateway::factory()->create([
-        'credentials' => ['token' => 'tok-original', 'public_key' => 'PUB-1'],
+        'credentials' => ['token' => 'tok-original'],
     ]);
 
     $this->actingAs($admin)->put("/admin/gateways-pagamento/{$gateway->id}", [
         'label' => 'Novo rótulo',
         'sandbox_mode' => '1',
-        'credentials' => ['token' => '', 'public_key' => 'PUB-1'],
+        'credentials' => ['token' => ''],
     ])->assertRedirect(route('payment-gateways.index'));
 
     expect($gateway->fresh()->credentials['token'])->toBe('tok-original')

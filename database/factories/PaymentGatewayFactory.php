@@ -18,7 +18,6 @@ class PaymentGatewayFactory extends Factory
             'label' => fake()->words(2, true),
             'credentials' => [
                 'token' => 'sandbox-token-'.fake()->uuid(),
-                'public_key' => 'PUB-'.fake()->uuid(),
             ],
             'sandbox_mode' => true,
             'is_active' => false,

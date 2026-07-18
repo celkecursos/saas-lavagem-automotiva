@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Plan;
+use App\Services\Payment\PagSeguroPublicKeyProvider;
 use App\Services\Payment\PaymentGatewayFactory;
 use Illuminate\View\View;
 
@@ -25,11 +26,15 @@ class CheckoutController extends Controller
             return view('checkout.unavailable', compact('plan'));
         }
 
-        // Só a chave PÚBLICA vai pra view (usada pelo encryptCard no
-        // browser) — o token/segredo da API fica só no backend.
-        return view('checkout.show', [
-            'plan' => $plan,
-            'publicKey' => $gateway->credentials['public_key'] ?? '',
-        ]);
+        // A chave pública do encryptCard é obtida via API com o próprio
+        // token (não é credencial do portal — task-4, seção 5.3). Só ELA
+        // vai pra view; o token da API fica no backend.
+        $publicKey = PagSeguroPublicKeyProvider::for($gateway);
+
+        if ($publicKey === null) {
+            return view('checkout.unavailable', compact('plan'));
+        }
+
+        return view('checkout.show', compact('plan', 'publicKey'));
     }
 }
