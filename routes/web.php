@@ -6,11 +6,20 @@ use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RegisterCarWashController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+// Cadastro self-service do lava-rápido (task-5, seção 2).
+Route::middleware('guest')->group(function () {
+    Route::get('/parceiros/cadastro', [RegisterCarWashController::class, 'create'])
+        ->name('partners.register');
+    Route::post('/parceiros/cadastro', [RegisterCarWashController::class, 'store'])
+        ->name('partners.register.store');
 });
 
 // Destino pós-login do Breeze: redireciona pro painel certo conforme o
