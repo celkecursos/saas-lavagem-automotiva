@@ -14,6 +14,7 @@ use App\Http\Controllers\Panel\TeamController as PanelTeamController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\RegisterCarWashController;
 use App\Http\Controllers\RegisterSubscriberController;
 use App\Http\Controllers\SubscriptionController;
@@ -89,6 +90,9 @@ Route::middleware('auth')->group(function () {
         ->name('subscription.cancel');
     Route::post('/assinatura/trocar-plano', [SubscriptionController::class, 'changePlan'])
         ->name('subscription.change-plan');
+
+    // Minhas indicações (task-16, seção 3).
+    Route::get('/indicacoes', [ReferralController::class, 'index'])->name('referrals.index');
 });
 
 // Webhook de pagamento — genérico por gateway (task-4/task-7, seção 3).
