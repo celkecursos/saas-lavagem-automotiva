@@ -11,10 +11,12 @@ use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ProductController as PanelProductController;
 use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
 use App\Http\Controllers\Panel\TeamController as PanelTeamController;
+use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegisterCarWashController;
 use App\Http\Controllers\RegisterSubscriberController;
+use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -59,7 +61,11 @@ Route::get('/dashboard', function () {
         return redirect()->route('panel.dashboard');
     }
 
-    return view('dashboard');
+    if ($user->subscriptions()->exists()) {
+        return redirect()->route('subscription.show');
+    }
+
+    return redirect()->route('plans.index');
 })->middleware('auth')->name('dashboard');
 
 Route::middleware('auth')->group(function () {
@@ -68,12 +74,22 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-// Checkout embedded do clube de assinatura (task-4, seção 5.3). O POST
-// /planos/{plan}/assinar que processa nasce na task-7.
+// Checkout embedded do clube de assinatura (task-4, seção 5.3; POST
+// que processa é da task-7, seção 3).
 Route::middleware('auth')->group(function () {
     Route::get('/planos/{plan}/checkout', [CheckoutController::class, 'show'])
         ->name('plans.checkout');
+    Route::post('/planos/{plan}/assinar', [CheckoutController::class, 'store'])
+        ->name('plans.subscribe');
+
+    // Painel do assinante (task-7, seção 6).
+    Route::get('/assinatura', [SubscriptionController::class, 'show'])
+        ->name('subscription.show');
 });
+
+// Webhook de pagamento — genérico por gateway (task-4/task-7, seção 3).
+Route::post('/webhooks/{gatewayTypeSlug}', [PaymentWebhookController::class, 'handle'])
+    ->name('payments.webhook');
 
 // Painel do admin (URLs em /admin, nomes internos em inglês — ver
 // convenção de idioma na orientacao.txt).
