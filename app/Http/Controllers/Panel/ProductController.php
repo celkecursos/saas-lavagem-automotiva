@@ -76,6 +76,57 @@ class ProductController extends Controller
             ->with('success', 'Gerenciador de estacionamento pausado.');
     }
 
+    /**
+     * Clube de lavagem: o dono ESCOLHE um payout_plan do catálogo (sem
+     * valor livre) e a solicitação cai na fila de aprovação do admin —
+     * envolve dinheiro repassado pela plataforma (task-5, seção 5).
+     * Trocar de plano depois volta pra 'pending' até nova aprovação.
+     */
+    public function requestClub(Request $request): RedirectResponse
+    {
+        $carWash = $this->authorizeOwnerAction($request);
+
+        $validated = $request->validate([
+            'payout_plan_id' => ['required', 'integer', 'exists:payout_plans,id'],
+        ], [
+            'payout_plan_id.required' => 'Escolha um plano de repasse pra solicitar a ativação.',
+        ]);
+
+        abort_unless(
+            PayoutPlan::whereKey($validated['payout_plan_id'])->where('active', true)->exists(),
+            422,
+        );
+
+        CarWashProductSubscription::updateOrCreate(
+            ['car_wash_id' => $carWash->id, 'product' => 'clube_lavagem'],
+            [
+                'status' => 'pending',
+                'payout_plan_id' => $validated['payout_plan_id'],
+                'activated_at' => null,
+                'suspended_at' => null,
+                'approved_by' => null,
+            ],
+        );
+
+        return redirect()->route('panel.products.index')
+            ->with('success', 'Solicitação enviada — aguardando aprovação da plataforma.');
+    }
+
+    public function pauseClub(Request $request): RedirectResponse
+    {
+        $carWash = $this->authorizeOwnerAction($request);
+
+        $carWash->productSubscriptions()
+            ->where('product', 'clube_lavagem')
+            ->where('status', 'active')
+            ->get()
+            ->each(fn (CarWashProductSubscription $subscription) => $subscription
+                ->update(['status' => 'suspended', 'suspended_at' => now()]));
+
+        return redirect()->route('panel.products.index')
+            ->with('success', 'Clube de lavagem pausado.');
+    }
+
     private function currentCarWash(): CarWash
     {
         return CarWash::findOrFail(session('current_car_wash_id'));

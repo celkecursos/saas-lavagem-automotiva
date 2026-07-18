@@ -24,6 +24,39 @@
             @else
                 <p class="text-sm mb-3">Situação: <x-badge status="nao-contratado" variant="secondary">não contratado</x-badge></p>
             @endif
+
+            @if ($isOwner)
+                @if ($clube?->status === 'active')
+                    <x-confirm-modal :action="route('panel.products.club.pause')"
+                                     title="Pausar o clube de lavagem?"
+                                     message="Reativar depois exige nova aprovação da plataforma."
+                                     confirm-label="Pausar">
+                        <x-slot:trigger><button type="button" class="btn-secondary">Pausar</button></x-slot:trigger>
+                    </x-confirm-modal>
+                @elseif ($clube?->status === 'pending')
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Solicitação aguardando aprovação da plataforma.</p>
+                @else
+                    {{-- Escolha do payout_plan: só opções do catálogo do
+                         admin, nunca valor livre (task-5, seção 5). --}}
+                    <form method="POST" action="{{ route('panel.products.club.request') }}">
+                        @csrf
+                        <x-form-field label="Plano de repasse" name="payout_plan_id">
+                            <select name="payout_plan_id" id="payout_plan_id" required
+                                    class="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-backgroundthirddark text-sm text-gray-900 dark:text-gray-100">
+                                <option value="">Escolha um plano…</option>
+                                @foreach ($payoutPlans as $payoutPlan)
+                                    <option value="{{ $payoutPlan->id }}" @selected(old('payout_plan_id') == $payoutPlan->id)>
+                                        {{ $payoutPlan->label }} — R$ {{ number_format($payoutPlan->base_price_cents / 100, 2, ',', '.') }} por lavagem
+                                    </option>
+                                @endforeach
+                            </select>
+                        </x-form-field>
+                        <button type="submit" class="btn-primary">
+                            {{ $clube ? 'Solicitar novamente' : 'Solicitar ativação' }}
+                        </button>
+                    </form>
+                @endif
+            @endif
         </x-card>
 
         {{-- Estacionamento: 100% self-service (task-5, seção 5). --}}

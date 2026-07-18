@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             PermissionSeeder::class,
             RoleSeeder::class,
             PaymentGatewayTypeSeeder::class,
+            PayoutPlanSeeder::class,
         ]);
     }
 }

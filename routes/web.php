@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\CarWashController;
+use App\Http\Controllers\Admin\CarWashProductSubscriptionController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\CheckoutController;
@@ -74,6 +75,17 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/lava-rapidos/{car_wash}/suspender', [CarWashController::class, 'suspend'])
         ->middleware('permission:car-washes.suspend')->name('car-washes.suspend');
 
+    // Fila de ativação do clube de lavagem (task-5, seção 5).
+    Route::get('/ativacoes-clube', [CarWashProductSubscriptionController::class, 'index'])
+        ->middleware('permission:car-wash-product-subscriptions.index')
+        ->name('car-wash-product-subscriptions.index');
+    Route::post('/ativacoes-clube/{subscription}/aprovar', [CarWashProductSubscriptionController::class, 'approve'])
+        ->middleware('permission:car-wash-product-subscriptions.approve')
+        ->name('car-wash-product-subscriptions.approve');
+    Route::post('/ativacoes-clube/{subscription}/rejeitar', [CarWashProductSubscriptionController::class, 'reject'])
+        ->middleware('permission:car-wash-product-subscriptions.reject')
+        ->name('car-wash-product-subscriptions.reject');
+
     // Gateways de pagamento (task-4, seção 4) — middleware permission
     // em cada rota individualmente (padrão do projeto, ver task-23).
     Route::get('/gateways-pagamento', [PaymentGatewayController::class, 'index'])
@@ -112,6 +124,10 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
         ->name('panel.products.parking.activate');
     Route::post('/produtos/estacionamento/pausar', [PanelProductController::class, 'pauseParking'])
         ->name('panel.products.parking.pause');
+    Route::post('/produtos/clube-lavagem/solicitar', [PanelProductController::class, 'requestClub'])
+        ->name('panel.products.club.request');
+    Route::post('/produtos/clube-lavagem/pausar', [PanelProductController::class, 'pauseClub'])
+        ->name('panel.products.club.pause');
 });
 
 require __DIR__.'/auth.php';
