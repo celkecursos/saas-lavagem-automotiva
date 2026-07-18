@@ -11,8 +11,10 @@ use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ProductController as PanelProductController;
 use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
 use App\Http\Controllers\Panel\TeamController as PanelTeamController;
+use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegisterCarWashController;
+use App\Http\Controllers\RegisterSubscriberController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -27,6 +29,19 @@ Route::middleware('guest')->group(function () {
     Route::post('/parceiros/cadastro', [RegisterCarWashController::class, 'store'])
         ->name('partners.register.store');
 });
+
+// Cadastro self-service do assinante (task-7, seção 1) — substitui o
+// /register genérico do Breeze; nome de rota 'register' mantido porque
+// as views do Breeze (welcome, etc.) já referenciam route('register').
+Route::middleware('guest')->group(function () {
+    Route::get('/registro', [RegisterSubscriberController::class, 'create'])
+        ->name('register');
+    Route::post('/registro', [RegisterSubscriberController::class, 'store'])
+        ->name('register.store');
+});
+
+// Vitrine de planos (task-7, seção 2).
+Route::get('/planos', [PlanController::class, 'index'])->name('plans.index');
 
 // Destino pós-login do Breeze: redireciona pro painel certo conforme o
 // perfil (staff -> /admin; vínculo com lava-rápido -> /painel; área do
