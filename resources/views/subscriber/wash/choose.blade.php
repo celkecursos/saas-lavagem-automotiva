@@ -1,0 +1,52 @@
+@extends('layouts.public')
+
+@section('title', 'Escolher lava-rápido — Celke Wash Club')
+
+@section('content')
+    <div class="max-w-2xl mx-auto px-4 py-10">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Resgatar lavagem</h1>
+
+        @if ($activeRedemption)
+            {{-- Código ativo em destaque enquanto 'requested' e não
+                 expirado (task-8, seção 3). --}}
+            <x-card title="Seu código">
+                <p class="text-4xl font-mono font-bold tracking-widest text-gray-900 dark:text-gray-100 text-center py-4">
+                    {{ $activeRedemption->confirmation_code }}
+                </p>
+                <p class="text-sm text-gray-600 dark:text-gray-400 text-center mb-4">
+                    Mostre esse código no balcão de <strong>{{ $activeRedemption->carWash->name }}</strong>.
+                    Válido até {{ $activeRedemption->code_expires_at->format('H:i') }}.
+                </p>
+                <x-confirm-modal :action="route('wash.cancel', $activeRedemption)"
+                                 title="Cancelar este código?"
+                                 message="Você pode gerar outro depois."
+                                 confirm-label="Cancelar código">
+                    <x-slot:trigger><button type="button" class="btn-danger w-full">Cancelar código</button></x-slot:trigger>
+                </x-confirm-modal>
+            </x-card>
+        @else
+            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Lava-rápidos disponíveis</h2>
+
+            @if ($carWashes->isEmpty())
+                <x-empty-state message="Nenhum lava-rápido disponível no momento." />
+            @else
+                <div class="space-y-3">
+                    @foreach ($carWashes as $carWash)
+                        <x-card>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-gray-900 dark:text-gray-100">{{ $carWash->name }}</p>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ $carWash->city }}/{{ $carWash->state }}</p>
+                                </div>
+                                <form method="POST" action="{{ route('wash.request', $carWash) }}">
+                                    @csrf
+                                    <button type="submit" class="btn-primary">Gerar código</button>
+                                </form>
+                            </div>
+                        </x-card>
+                    @endforeach
+                </div>
+            @endif
+        @endif
+    </div>
+@endsection

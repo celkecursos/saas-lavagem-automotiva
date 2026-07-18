@@ -18,6 +18,7 @@ use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\RegisterCarWashController;
 use App\Http\Controllers\RegisterSubscriberController;
 use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\WashController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -93,6 +94,11 @@ Route::middleware('auth')->group(function () {
 
     // Minhas indicações (task-16, seção 3).
     Route::get('/indicacoes', [ReferralController::class, 'index'])->name('referrals.index');
+
+    // Resgate de lavagem — lado do assinante (task-8, seção 6).
+    Route::get('/lavagem/escolher', [WashController::class, 'choose'])->name('wash.choose');
+    Route::post('/lavagem/{car_wash}/resgatar', [WashController::class, 'request'])->name('wash.request');
+    Route::post('/lavagem/{wash_redemption}/cancelar', [WashController::class, 'cancel'])->name('wash.cancel');
 });
 
 // Webhook de pagamento — genérico por gateway (task-4/task-7, seção 3).
