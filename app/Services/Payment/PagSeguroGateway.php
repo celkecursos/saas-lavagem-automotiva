@@ -95,11 +95,43 @@ class PagSeguroGateway implements PaymentGatewayInterface
 
     /**
      * Cobrança de renovação com o card.id salvo + recurring SUBSEQUENT —
-     * implementada no commit seguinte da task-4 (commit 7).
+     * o assinante não vê nada (task-4, seção 5). Disparada pelo
+     * scheduler subscriptions:renew (task-7).
      */
     public function chargeSavedMethod(Order $order, PaymentMethodToken $method): ChargeResult
     {
-        throw new \LogicException('chargeSavedMethod é implementado no commit 7 da task-4.');
+        $response = $this->http()->post($this->baseUrl().'/orders', [
+            'reference_id' => $this->orderReference($order),
+            'customer' => $this->customerPayload($order),
+            'items' => [[
+                'name' => "Pedido #{$order->id}",
+                'quantity' => 1,
+                'unit_amount' => $order->amount_cents,
+            ]],
+            'charges' => [[
+                'reference_id' => $this->orderReference($order),
+                'description' => "Renovação — pedido #{$order->id}",
+                'amount' => ['value' => $order->amount_cents, 'currency' => $order->currency],
+                'payment_method' => [
+                    'type' => 'CREDIT_CARD',
+                    'installments' => 1,
+                    'capture' => true,
+                    'card' => [
+                        'id' => $method->token,
+                        'recurring' => ['type' => 'SUBSEQUENT'],
+                    ],
+                ],
+            ]],
+        ]);
+
+        $charge = $response->json('charges.0');
+        $paid = ($charge['status'] ?? null) === 'PAID';
+
+        return new ChargeResult(
+            status: $paid ? 'paid' : 'failed',
+            externalReference: $charge['id'] ?? null,
+            failureReason: $paid ? null : ($charge['payment_response']['message'] ?? 'Cobrança recusada'),
+        );
     }
 
     public function supportsSavedCardRecurring(): bool
