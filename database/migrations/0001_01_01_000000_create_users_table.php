@@ -17,8 +17,19 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->string('phone')->nullable();
+            $table->string('cpf', 14)->unique()->nullable();
+            // Só distingue staff da plataforma ('admin') do resto ('user') —
+            // as capacidades de assinante/lava-rápido vêm das relações
+            // (subscriptions / car_wash_users), não deste campo (ver task-3).
+            $table->enum('role', ['user', 'admin'])->default('user');
+            // Suspensão administrativa: bloqueia login independente de
+            // qualquer outro status (ver task-22).
+            $table->timestamp('suspended_at')->nullable();
+            $table->text('suspension_reason')->nullable();
             $table->rememberToken();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
