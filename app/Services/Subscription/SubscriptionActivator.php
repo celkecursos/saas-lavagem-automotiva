@@ -7,6 +7,7 @@ use App\Models\ReferralReward;
 use App\Models\Subscription;
 use App\Models\SubscriptionCycle;
 use App\Notifications\SubscriptionConfirmed;
+use App\Services\Referral\ReferralRewardGranter;
 
 /**
  * Ativa uma subscription a partir do 1º pagamento confirmado 'paid'
@@ -40,7 +41,7 @@ class SubscriptionActivator
             'current_period_end' => $periodEnd,
         ]);
 
-        SubscriptionCycle::create([
+        $cycle = SubscriptionCycle::create([
             'subscription_id' => $subscription->id,
             'period_start' => now(),
             'period_end' => $periodEnd,
@@ -48,6 +49,10 @@ class SubscriptionActivator
             'quota_total' => $plan->wash_quota,
             'quota_used' => 0,
         ]);
+
+        // Bônus de indicação em fila pro INDICADOR (não pro indicado que
+        // está ativando agora) — task-16, seção 2, passo 4.
+        ReferralRewardGranter::grantPendingRewardsFor($cycle);
 
         $subscription->user->notify(new SubscriptionConfirmed($subscription->fresh()));
 

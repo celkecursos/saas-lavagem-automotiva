@@ -10,6 +10,7 @@ use App\Notifications\SubscriptionCanceled;
 use App\Notifications\SubscriptionRenewalFailed;
 use App\Notifications\SubscriptionRenewed;
 use App\Services\Payment\PaymentGatewayFactory;
+use App\Services\Referral\ReferralRewardGranter;
 use Illuminate\Support\Carbon;
 
 /**
@@ -121,13 +122,17 @@ class SubscriptionRenewalService
             'pending_plan_id' => null,
         ]);
 
-        SubscriptionCycle::create([
+        $cycle = SubscriptionCycle::create([
             'subscription_id' => $subscription->id,
             'period_start' => $previousPeriodEnd,
             'period_end' => $newPeriodEnd,
             'quota_total' => $quotaTotal,
             'quota_used' => 0,
         ]);
+
+        // Mesmo ponto de código que concede o bônus na ativação inicial
+        // (task-16, seção 2, passo 4) — todo ciclo novo pro indicador.
+        ReferralRewardGranter::grantPendingRewardsFor($cycle);
 
         $subscription->user->notify(new SubscriptionRenewed($subscription->fresh()));
     }
