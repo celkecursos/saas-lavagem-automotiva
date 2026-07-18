@@ -3,6 +3,10 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/* Estilo base de inputs/selects que as views de auth do Breeze assumem
+   (sintaxe de plugin do Tailwind v4). */
+@plugin '@tailwindcss/forms';
+
 /* Dark mode por classe "dark" no <html> (toggle na task-18), em vez do
    padrão prefers-color-scheme do Tailwind v4. */
 @custom-variant dark (&:where(.dark, .dark *));

@@ -5,10 +5,37 @@ use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
+use App\Http\Controllers\ProfileController;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+// Destino pós-login do Breeze: redireciona pro painel certo conforme o
+// perfil (staff -> /admin; vínculo com lava-rápido -> /painel; área do
+// assinante nasce na task-7). Sem middleware 'verified': o dono de
+// lava-rápido acessa o painel "aguardando aprovação" antes de verificar
+// o e-mail (task-5, seção 2).
+Route::get('/dashboard', function () {
+    $user = auth()->user();
+
+    if ($user->role === 'admin') {
+        return redirect()->route('admin.dashboard');
+    }
+
+    if (DB::table('car_wash_users')->where('user_id', $user->id)->exists()) {
+        return redirect()->route('panel.dashboard');
+    }
+
+    return view('dashboard');
+})->middleware('auth')->name('dashboard');
+
+Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
 // Checkout embedded do clube de assinatura (task-4, seção 5.3). O POST
@@ -48,3 +75,5 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
     Route::get('/', PanelDashboardController::class)->name('panel.dashboard');
     Route::post('/trocar-lava-rapido', CarWashSwitchController::class)->name('panel.car-wash.switch');
 });
+
+require __DIR__.'/auth.php';
