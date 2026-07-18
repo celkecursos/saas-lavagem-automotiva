@@ -33,6 +33,12 @@
     --color-colortextseconddark: #0d47f8;
 }
 
+/* Elementos Alpine.js escondidos até o framework iniciar (ex: modal
+   de confirmação da task-14). */
+[x-cloak] {
+    display: none !important;
+}
+
 /* Classes utilitárias replicadas do adm (task-6, seções 1 e 4) — pares
    -100/-800 no claro e -900/-300 no escuro já aprovados em contraste. */
 @layer components {
