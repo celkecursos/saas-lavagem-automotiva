@@ -1,0 +1,108 @@
+TASK 19 - Sino de notificações no painel
+==============================================
+
+OBJETIVO
+--------
+Notificações in-app (sino no header, contador de não lidas, dropdown
+com as últimas) pros eventos que hoje só disparam e-mail — pra quem
+está com o painel aberto ver o alerta sem precisar navegar até a tela
+específica ou esperar o e-mail chegar.
+
+
+1. INFRAESTRUTURA (LARAVEL NOTIFICATIONS, CANAL DATABASE)
+------------------------------------------------------------------
+Usa o sistema de Notifications nativo do Laravel, canal 'database' (já
+inclui a trait Notifiable no model User por padrão no scaffold):
+
+  ./vendor/bin/sail artisan notifications:table
+  ./vendor/bin/sail artisan migrate
+
+Cria a tabela padrão `notifications` (id uuid, type, notifiable_type/
+notifiable_id, data JSON, read_at nullable, created_at/updated_at) —
+não precisa de migration customizada, é a tabela padrão do framework.
+
+
+2. NOTIFICAÇÕES A CRIAR (complementam o e-mail, não substituem)
+------------------------------------------------------------------------
+Pro ADMIN (respeitando a mesma permission de quem pode agir — task-11):
+  - NewCarWashPendingApproval        (task-5 — novo cadastro na fila)
+  - NewClubActivationRequest         (task-5/9 — pedido de ativação do
+                                     clube de lavagem aguardando)
+  - NewCancellationRequest           (task-8/9/10 — solicitação de
+                                     cancelamento aberta)
+  - ParkingBillingChargeFlagged      (task-10 — cobrança sinalizada
+                                     pelo antifraude)
+  - ChargebackReceived               (task-21 — chargeback via webhook,
+                                     via=['mail','database'], acrescentada
+                                     depois desta task ser escrita —
+                                     mesma permission de orders.refund)
+
+Pro LAVA-RÁPIDO (car_wash_users daquele car_wash):
+  - ClubActivationDecided            (task-5 — aprovado/rejeitado)
+  - PayoutGenerated / PayoutPaid     (task-9 — mesmo gatilho do e-mail
+                                     já existente)
+  - CancellationRequestDecided       (task-9/10 — aprovado/rejeitado)
+
+Pro ASSINANTE:
+  - WashRedemptionConfirmed          (task-8 — mesmo gatilho do e-mail)
+  - ReferralRewardGranted            (task-16 — ganhou uma lavagem
+                                     bônus por indicação)
+  - AchievementUnlocked              (task-20 — desbloqueou uma
+                                     conquista de fidelidade, via() só
+                                     ['database'], sem e-mail — ver
+                                     task-20, seção 3)
+
+Esta lista não é fechada — qualquer task nova que precise de alerta
+in-app só adiciona mais uma Notification aqui, reaproveitando o mesmo
+canal ->via(['mail', 'database']) ou só ['database'] quando não fizer
+sentido e-mail (ex: conquista de fidelidade).
+
+Cada Notification implementa toDatabase() retornando um array simples
+(título, corpo curto, url pra onde o clique leva) — reaproveitar o
+MESMO evento/trigger que já dispara o e-mail correspondente (não
+duplicar lógica de "quando disparar", só adicionar mais um canal na
+mesma notificação: ->via() retorna ['mail', 'database']).
+
+
+3. COMPONENTE DO SINO (HEADER DOS 3 LAYOUTS AUTENTICADOS)
+------------------------------------------------------------------
+<x-notification-bell /> (task-14, header do admin e do painel do
+lava-rápido/assinante):
+  - Ícone de sino com badge de contador (auth()->user()->
+    unreadNotifications()->count()), só aparece se > 0.
+  - Dropdown ao clicar: últimas 5 notificações (mais recentes primeiro),
+    cada uma com título/corpo curto/tempo relativo (ex: "há 2 min").
+  - Clicar numa notificação marca ela como lida (markAsRead()) e
+    navega pra url salva no data.
+  - Link "Ver todas" no fim do dropdown -> /notificacoes (lista
+    completa paginada).
+  - Botão "Marcar todas como lidas" na tela /notificacoes.
+
+Atualização do contador: polling simples (ex: a cada 30s via fetch) na
+v1 — não depende de WebSocket/Reverb pra funcionar. Se um dia quiser
+o sino atualizar instantaneamente sem polling, é a entrada natural pra
+Laravel Reverb (broadcasting), mas isso é uma melhoria separada, não
+requisito desta task.
+
+
+4. ROTAS (RESUMO)
+-----------------------
+Qualquer usuário autenticado (admin, lava-rápido, assinante):
+  GET  /notificacoes
+  POST /notificacoes/{id}/marcar-lida
+  POST /notificacoes/marcar-todas-lidas
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(notifications): tabela padrão de notifications (Laravel)"
+  2. "feat(notifications): classes de notificação pros eventos de admin/lava-rápido/assinante"
+  3. "feat(ui): componente <x-notification-bell> nos layouts"
+  4. "feat(notifications): tela /notificacoes (listar/marcar como lida)"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks — esta task
+depende da task-14 (layouts) e reaproveita os gatilhos de e-mail já
+existentes nas tasks 5, 8, 9, 10 e 16.

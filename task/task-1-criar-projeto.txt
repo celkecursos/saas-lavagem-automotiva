@@ -1,0 +1,370 @@
+TASK 1 - Criar o projeto Laravel 13 usando SOMENTE Docker
+============================================================
+
+OBJETIVO
+--------
+Criar o projeto base do SaaS de lavagem automotiva sem instalar PHP,
+Composer, Node ou qualquer outra ferramenta no PC. As únicas duas coisas
+necessárias na máquina são:
+
+  1. Docker (+ Docker Compose, que já vem junto no Docker Desktop /
+     docker-compose-plugin no Linux)
+  2. VSCode (só para editar os arquivos)
+
+Tudo o resto (PHP, Composer, Node, MySQL, Redis etc.) roda dentro de
+containers. Isso é possível porque o próprio Laravel oferece um pacote
+chamado Sail, feito exatamente para esse cenário: "zero instalação local".
+
+
+PASSO 0 - Configurar o repositório Git (antes de criar o projeto)
+-----------------------------------------------------------------------
+O projeto inteiro vai ser versionado com Git desde o primeiro arquivo,
+em commits pequenos (ver seção "COMMITS SUGERIDOS" no final deste
+arquivo, e a mesma seção repetida em cada task seguinte).
+
+OBRIGATÓRIO: este passo é bloqueante. Se for uma IA executando esta
+task, a PRIMEIRA ação — antes de rodar qualquer comando do Passo 1 —
+é PARAR e PERGUNTAR ao usuário qual é o endereço do repositório remoto
+no GitHub. Não prosseguir com nenhum comando de Docker/Laravel sem essa
+resposta, mesmo que o restante da task pareça independente disso — o
+`git remote add origin` do item 4 abaixo depende dela, e deixar pra
+pedir depois só adia um bloqueio que vai acontecer de qualquer jeito.
+
+1. Solicitar ao usuário o endereço do repositório remoto no GitHub que
+   ele já criou para este projeto (HTTPS ou SSH):
+
+     ENDEREÇO DO REPOSITÓRIO: _______________________________________
+     (ex: https://github.com/sua-conta/celke-wash-club.git
+      ou  git@github.com:sua-conta/celke-wash-club.git)
+
+2. IMPORTANTE — o VSCode precisa estar CONECTADO à sua conta do GitHub
+   antes de seguir, senão o push mais adiante vai falhar ou ficar
+   pedindo autenticação toda hora:
+   - Painel "Source Control" do VSCode -> "Sign in to GitHub", ou
+   - Extensão "GitHub Pull Requests and Issues" logada, ou
+   - `gh auth login` no terminal (se tiver o GitHub CLI).
+   Confirme que aparece seu usuário do GitHub conectado no VSCode antes
+   de continuar.
+
+3. Exceção pontual à regra "só Docker": o `git` em si precisa estar
+   disponível no terminal do HOST (fora de container), porque é o
+   painel Source Control do VSCode que fala diretamente com o binário
+   `git` instalado na máquina — diferente de PHP/Composer/Node, não dá
+   pra rodar só via container nesse caso específico. A boa notícia é
+   que praticamente toda distribuição Linux já vem com git
+   pré-instalado (confirme com `git --version`); se realmente não
+   tiver, essa é a única ferramenta de sistema operacional que foge da
+   regra "só Docker e VSCode" deste projeto, por ser um requisito do
+   próprio VSCode, não do Laravel.
+
+4. NÃO rode `git init` ainda. Guarde o endereço do repositório
+   (item 1) e siga pro Passo 1 — o `git init` só acontece DEPOIS que o
+   Passo 1 criar a pasta do projeto Laravel (`lavagem-automotiva/`),
+   já rodando de DENTRO dela (ver final do Passo 1). O motivo: neste
+   momento a pasta `lavagem-automotiva/` ainda não existe (só é criada
+   pelo `composer create-project` do Passo 1); rodar `git init` agora
+   criaria o repositório Git na pasta ERRADA (a pasta pai
+   `saas-lavagem-automotiva/`, que tem as tasks e outros arquivos que
+   não fazem parte do código do projeto) em vez da raiz do projeto
+   Laravel.
+
+
+PASSO 1 - Criar o projeto sem PHP/Composer instalado localmente
+-----------------------------------------------------------------
+O Laravel disponibiliza uma imagem Docker (laravelsail/phpXX-composer)
+que contém PHP + Composer só para rodar o `composer create-project`.
+O comando roda, cria os arquivos do Laravel numa pasta montada como
+volume, e o container é descartado (--rm) logo em seguida.
+
+Abra o terminal na pasta onde os projetos ficam (ex: dentro de
+saas-lavagem-automotiva/) e rode:
+
+  docker run --rm \
+      -u "$(id -u):$(id -g)" \
+      -v "$(pwd):/opt" \
+      -w /opt \
+      laravelsail/php84-composer:latest \
+      composer create-project laravel/laravel lavagem-automotiva "^13.0"
+
+Explicando:
+  -u "$(id -u):$(id -g)"    -> os arquivos criados ficam com seu usuário
+                               dono (não como root), evitando problema
+                               de permissão depois no VSCode.
+  -v "$(pwd):/opt"          -> monta a pasta atual dentro do container.
+  -w /opt                   -> define /opt como diretório de trabalho.
+  "lavagem-automotiva"      -> nome da pasta do projeto que será criada.
+  "^13.0"                   -> força a versão 13 do Laravel.
+
+IMPORTANTE: não use "app" como nome da pasta do projeto. O próprio
+Laravel já cria internamente uma pasta app/ (com Models, Http,
+Providers etc.), então um projeto chamado "app" geraria caminhos
+confusos como app/app/Models. Por isso usamos "lavagem-automotiva"
+como nome da pasta raiz do projeto.
+
+Ao final, vai existir uma pasta ./lavagem-automotiva com o projeto
+Laravel 13 completo, já com o pacote laravel/sail instalado (ele vem
+por padrão em novas instalações do Laravel).
+
+Agora sim, inicialize o Git DENTRO da pasta do projeto (retomando o
+Passo 0, item 4 — endereço do repositório já em mãos):
+
+  cd lavagem-automotiva
+  git init
+  git remote add origin <endereço colado no Passo 0>
+  git branch -M main
+
+O `.git` fica exatamente na raiz de `lavagem-automotiva/` (a raiz do
+projeto Laravel) — nunca na pasta pai `saas-lavagem-automotiva/`, que
+só guarda as tasks/documentação, não faz parte do código versionado.
+
+O PRIMEIRO commit só acontece ao final deste Passo 1, depois que o
+.gitignore padrão do Laravel já existir (ver "COMMITS SUGERIDOS").
+
+
+PASSO 2 - Subir o ambiente com Sail (Docker Compose)
+-------------------------------------------------------
+Entre na pasta do projeto:
+
+  cd lavagem-automotiva
+
+O Laravel já gera um docker-compose.yml pronto (via Sail). Para
+customizar quais serviços vêm junto (mysql, redis, mailpit etc.), pode
+rodar o instalador do Sail (também via Docker, sem nada local):
+
+  docker run --rm \
+      -u "$(id -u):$(id -g)" \
+      -v "$(pwd):/opt" \
+      -w /opt \
+      laravelsail/php84-composer:latest \
+      php artisan sail:install --with=mysql,redis,mailpit
+
+Isso gera/atualiza o docker-compose.yml com os serviços escolhidos.
+
+Sugestão de serviços para o SaaS de lavagem automotiva:
+  - mysql (banco principal)
+  - redis (cache, filas, sessão)
+  - mailpit (testar e-mails em desenvolvimento)
+
+Depois, para subir tudo:
+
+  ./vendor/bin/sail up -d
+
+Isso inicia os containers (app PHP, mysql, redis, mailpit...) em segundo
+plano. Não precisa de PHP local para rodar esse comando: o próprio
+vendor/bin/sail é um script bash que chama docker compose por trás.
+
+
+PASSO 3 - Comandos do dia a dia (tudo via Sail)
+----------------------------------------------------
+Depois que o ambiente estiver de pé, todo comando que normalmente seria
+"php artisan ...", "composer ...", "npm ..." passa a ser feito com o
+prefixo "sail":
+
+  ./vendor/bin/sail artisan migrate
+  ./vendor/bin/sail artisan make:model WashRedemption -mcr
+  ./vendor/bin/sail composer require algum/pacote
+  ./vendor/bin/sail npm install
+  ./vendor/bin/sail npm run dev
+  ./vendor/bin/sail tinker
+  ./vendor/bin/sail test
+
+Dica: criar um alias no ~/.bashrc (isso é só configuração do terminal,
+não é "instalar programa") para não digitar o caminho inteiro sempre:
+
+  alias sail='sh $([ -f sail ] && echo sail || echo vendor/bin/sail)'
+
+Depois disso, os comandos ficam:
+
+  sail up -d
+  sail artisan migrate
+  sail composer require ...
+
+
+PASSO 4 - Acessar a aplicação
+----------------------------------
+Por padrão o Sail expõe a aplicação em:
+
+  http://localhost
+
+(a porta pode ser ajustada na variável APP_PORT do arquivo .env do
+projeto, caso a 80 já esteja em uso no PC).
+
+
+PASSO 5 - Documentação do projeto (tasks, orientacao, LICENSE, README)
+------------------------------------------------------------------------------
+As tasks (este arquivo incluído) vivem hoje em saas-lavagem-automotiva/
+(um nível ACIMA da pasta do projeto Laravel, lavagem-automotiva/). Elas
+precisam ir junto pro repositório do projeto, não ficar só na máquina
+de quem criou — quem clonar o repo depois (inclusive você mesmo, em
+outra máquina) precisa achar a especificação completa dentro do
+próprio código.
+
+1. Criar a pasta task/ dentro do projeto Laravel e copiar todas as
+   tasks + a orientação geral pra dentro dela:
+
+     mkdir -p task
+     cp ../task-*.txt task/
+     cp ../orientacao.txt task/
+
+2. Copiar o LICENSE pra raiz do projeto Laravel (não pra dentro de
+   task/ — LICENSE.txt fica na raiz por convenção do GitHub, é o que
+   o próprio GitHub reconhece e mostra automaticamente na página do
+   repositório):
+
+     cp ../LICENSE.txt .
+
+2.1. Copiar o favicon e a logo (também estão em saas-lavagem-automotiva/,
+   ao lado das tasks) pra dentro de public/ do projeto Laravel:
+
+     cp ../favicon.ico public/favicon.ico
+     mkdir -p public/images
+     cp ../logo-define-500x500_v3.png public/images/logo.png
+
+   O favicon.ico já vem pronto (ICO padrão, 16x16 e 32x32) —
+   public/favicon.ico é o caminho que o próprio navegador busca
+   automaticamente, sem precisar de nada extra no <head> (mas incluir
+   a tag <link rel="icon"> mesmo assim nos layouts, ver task-12/14, por
+   clareza e compatibilidade com navegadores mais antigos).
+
+   A logo é um PNG quadrado 500x500 com fundo transparente — VERIFICAR
+   se precisa ser redimensionada antes de usar em cada lugar: um
+   cabeçalho de site/painel normalmente usa a logo bem menor (ex:
+   40-48px de altura), então controlar o tamanho via width/height no
+   HTML/CSS (nunca forçar o arquivo de 500x500 num <img> sem
+   width/height explícito, senão o navegador carrega o arquivo inteiro
+   só pra exibir um ícone pequeno — desperdício de banda). Se algum
+   lugar precisar de uma versão maior (ex: hero da home, task-12), o
+   arquivo original de 500x500 já serve sem redimensionar.
+
+3. Criar o README.md na raiz do projeto (substituindo o README padrão
+   que o Laravel já gera, se houver) com o conteúdo abaixo — ajustar o
+   nome do repositório/URL de clone conforme o endereço colado no
+   Passo 0:
+
+     # Celke Wash Club
+
+     SaaS de clube de assinatura para lavagem automotiva, com módulo
+     independente de gerenciador de estacionamento.
+
+     ## Stack
+
+     Laravel 13 (sempre a última versão estável do framework — não
+     fixar em versões anteriores por hábito de outros projetos). Antes
+     de implementar qualquer funcionalidade, consultar a documentação
+     oficial (laravel.com/docs na versão correspondente, e a
+     documentação do pacote específico quando for algo de terceiros)
+     em vez de confiar só em conhecimento prévio.
+
+     ## Requisitos
+
+     - Docker (+ Docker Compose)
+     - VSCode (ou editor similar), conectado à sua conta do GitHub
+
+     Nenhuma outra ferramenta precisa ser instalada na máquina — PHP,
+     Composer, Node, MySQL, Redis etc. rodam todos via Docker (Laravel
+     Sail).
+
+     ## Como rodar
+
+     ```
+     git clone <endereço deste repositório>
+     cd lavagem-automotiva
+     cp .env.example .env
+     ./vendor/bin/sail up -d
+     ./vendor/bin/sail artisan key:generate
+     ./vendor/bin/sail artisan migrate
+     ```
+
+     Acesse http://localhost.
+
+     ## Usuários de teste (seed)
+
+     Rodar `./vendor/bin/sail artisan db:seed` cria os usuários abaixo
+     (senha igual pra todos — SÓ pra ambiente de desenvolvimento/
+     demonstração, nunca usar em produção):
+
+     | E-mail | Senha | Papel |
+     |---|---|---|
+     | cesar@celke.com.br | 123456A#b | Superadmin |
+     | kelly@celke.com.br | 123456A#b | Administrador |
+     | jessica@celke.com.br | 123456A#b | Lava-rápido (estacionamento) |
+     | gabrielly@celke.com.br | 123456A#b | Assinante |
+
+     Detalhe completo de como o seeder monta cada papel/permissão em
+     [`task/task-23-gerenciador-permissoes-seed-usuarios.txt`](./task/task-23-gerenciador-permissoes-seed-usuarios.txt).
+
+     ## Documentação completa
+
+     A pasta [`task/`](./task) tem a especificação completa do
+     projeto: `orientacao.txt` é o ponto de partida (pré-requisitos e
+     ordem de execução), e cada `task-N-*.txt` detalha uma
+     funcionalidade (schema, rotas, testes, commits sugeridos).
+
+     ## Autor
+
+     Desenvolvido por [Cesar Szpak](https://celke.com.br) — [Celke
+     Cursos](https://github.com/celkecursos).
+
+     ## Licença
+
+     MIT — veja o arquivo [LICENSE](LICENSE.txt) para detalhes.
+
+Isso NÃO é opcional/só se sobrar tempo — é parte da task-1, porque sem
+isso o repositório sobe pro GitHub sem nenhuma documentação junto do
+código, o que quebra o propósito de ter as tasks versionadas desde o
+início (Passo 0).
+
+
+OBSERVAÇÕES IMPORTANTES
+----------------------------
+- Laravel 13 exige PHP 8.3 ou superior. Por isso usamos a imagem
+  laravelsail/php84-composer (PHP 8.4) tanto para criar o projeto quanto
+  depois, já que o Sail vai usar a mesma versão de PHP para rodar o app.
+- Nenhum passo acima instala nada fora de containers Docker. O único
+  arquivo que "sobra" no PC é o próprio código-fonte do projeto (pasta
+  lavagem-automotiva/), que é exatamente o que precisa ficar
+  versionado no Git.
+- O VSCode só edita arquivos de texto; ele não precisa de nenhuma
+  extensão de PHP rodando localmente para isso funcionar (ainda que
+  extensões de PHP/Laravel no VSCode ajudem com autocomplete, elas são
+  opcionais e não interferem no fato de tudo rodar via Docker).
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+Fazer commits pequenos, um por marco concreto, em vez de um commit
+único gigante no final — facilita acompanhar a evolução do projeto
+pelo histórico do Git:
+
+  1. Depois do Passo 1 (composer create-project + git init DENTRO de
+     lavagem-automotiva/, ver final do Passo 1):
+     git add .
+     git commit -m "chore: cria projeto Laravel 13 base via Sail"
+     git push -u origin main
+     (este é o PRIMEIRO commit e PRIMEIRO push — confirma que o
+     endereço do Passo 0 e a conexão do VSCode com o GitHub estão
+     realmente funcionando, antes de acumular mais trabalho em cima de
+     uma configuração que pode estar errada)
+
+  2. Depois do Passo 2 (sail:install --with=mysql,redis,mailpit):
+     git add docker-compose.yml
+     git commit -m "chore: configura serviços do Sail (mysql, redis, mailpit)"
+     git push
+
+  3. Depois do Passo 5 (documentação):
+     git add task/ LICENSE.txt README.md public/favicon.ico public/images/logo.png
+     git commit -m "docs: adiciona tasks, orientacao, LICENSE, README, favicon e logo"
+     git push
+
+OBRIGATÓRIO: git push logo depois de CADA commit acima, nunca só no
+final — ver a regra geral em orientacao.txt ("como usar cada task").
+
+Conferir ANTES do commit 2 que o .gitignore gerado pelo Laravel já
+cobre vendor/, node_modules/, .env e storage/*.key — nunca commitar
+credenciais nem a pasta vendor/.
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

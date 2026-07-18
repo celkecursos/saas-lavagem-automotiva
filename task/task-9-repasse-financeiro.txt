@@ -1,0 +1,209 @@
+TASK 9 - Cálculo e execução do repasse financeiro aos lava-rápidos
+========================================================================
+
+OBJETIVO
+--------
+Calcular e registrar quanto cada lava-rápido tem a receber pelas
+lavagens confirmadas (wash_redemptions status='completed') e controlar
+o pagamento desse valor (payout). V1: repasse é um PROCESSO PRÓPRIO da
+plataforma (lote calculado + admin marca como pago), não split
+automático via gateway — já era a decisão registrada na task-3.
+
+
+1. COMO O VALOR DO REPASSE É DEFINIDO (revisão 2026-07-16)
+------------------------------------------------------------------
+A v1 deste documento previa um valor livre (payout_rate_cents)
+negociado caso a caso — isso contradizia a task-5, que descrevia a
+ativação do produto como self-service. Corrigido: o repasse agora tem
+DOIS componentes, ambos já modelados na task-3:
+
+  a) Um valor BASE fixo, escolhido de um catálogo do admin
+     (payout_plans — categorias com nome de marketing e níveis, ex:
+     "Essencial Nível 1" = R$ 20,00, "Turbo Nível 2" = R$ 50,00). O
+     lava-rápido ESCOLHE um desses planos ao pedir ativação do
+     'clube_lavagem' (task-5, seção 5) — nunca digita um valor livre.
+     Essa escolha só vira efetiva depois que o admin aprova a ativação
+     (também task-5).
+
+  b) Um PERCENTUAL sobre esse valor base, que varia com a nota média de
+     satisfação do lava-rápido (car_washes.satisfaction_score,
+     alimentada pelas avaliações dos assinantes — task-8, seção 2,
+     passo 7):
+
+       satisfaction_score < 70              -> 60% do valor base
+       70 <= satisfaction_score <= 90        -> 70% do valor base (padrão)
+       satisfaction_score > 90               -> 75% do valor base
+       sem nenhuma avaliação ainda (null)    -> 70% (padrão, até ter
+                                              dado real)
+
+     Isso cria um incentivo direto: lava-rápido mal avaliado recebe
+     menos por lavagem, bem avaliado recebe mais.
+
+O valor final de cada lavagem = base_price_cents (congelado em
+wash_redemptions.base_price_cents_snapshot no momento da confirmação,
+ver task-8) × percentual (calculado SÓ na hora de gerar o payout — não
+no momento da confirmação, porque a nota do lava-rápido pode continuar
+mudando entre a lavagem e o fechamento do lote).
+
+Isso significa que o mesmo base_price_cents_snapshot pode gerar valores
+de repasse diferentes dependendo de quando o payouts:generate roda em
+relação à evolução da nota do lava-rápido — comportamento esperado, não
+um bug.
+
+
+2. GERAÇÃO DO LOTE DE REPASSE
+------------------------------------
+Comando artisan payouts:generate {--period=monthly} (rodado pelo
+scheduler, ex: todo dia 1º do mês, cobrindo o período anterior):
+
+  1. Agrupa wash_redemptions com status='completed' AND
+     payout_item_id IS NULL, por car_wash_id.
+  2. Para cada car_wash com pelo menos 1 lavagem no grupo:
+     - resolve o percentual atual a partir de car_washes.satisfaction_score
+       (tabela da seção 1: <70 -> 60%, 70-90 -> 70%, >90 -> 75%, null -> 70%)
+     - pra cada wash_redemption do grupo: amount_cents = round(
+       base_price_cents_snapshot * percentual) -> vira um payout_item
+     - cria payouts (car_wash_id, period_start, period_end,
+       status='pending', total_amount_cents = soma dos amount_cents
+       dos payout_items criados)
+     - atualiza wash_redemptions.payout_item_id de cada uma (marca como
+       "já entrou em um lote", não entra de novo no próximo).
+
+  Importante: o percentual é resolvido UMA VEZ por car_wash a cada
+  rodada do comando (não por lavagem individual) — todas as lavagens
+  daquele lote usam a nota do lava-rápido no momento em que o lote foi
+  gerado, mesmo que algumas lavagens sejam de dias diferentes dentro do
+  período.
+
+Rodar como comando idempotente: se rodar 2x no mesmo dia sem novas
+lavagens completadas, não gera payout vazio nem duplicado (o filtro
+payout_item_id IS NULL já garante isso).
+
+CUIDADO (lição já aprendida em outro projeto do mesmo ecossistema):
+scheduler só funciona de verdade se schedule:work estiver rodando
+continuamente (dev: adicionar ao script "dev" do composer.json, junto
+de queue:listen se filas forem usadas; produção: cron chamando
+schedule:run a cada minuto). "O comando existir" não é o mesmo que "o
+comando ser executado" — conferir isso já na task-1/ambiente antes de
+depender do agendamento.
+
+
+3. EXECUÇÃO DO PAGAMENTO (MANUAL NA V1)
+-----------------------------------------------
+Painel do admin, tela payouts.index/show:
+  - Lista payouts por status (pending -> success na task-6 é warning;
+    ajustar: pending=warning, paid=success, failed=danger — já
+    documentado na task-6).
+  - Ação "Marcar como pago" (POST /admin/payouts/{payout}/mark-paid):
+    exige campo de referência (ex: nº da transferência bancária),
+    grava status='paid', paid_at=now(). Auditable (já definido na
+    task-3: todo o ciclo de payouts/payout_items).
+  - Ação "Marcar como falhou" (ex: dados bancários errados) ->
+    status='failed', permite corrigir e tentar de novo no próximo
+    lote (não reprocessa sozinho — intervenção manual do admin).
+
+Pagamento em si (transferência bancária, PIX etc.) acontece FORA do
+sistema na v1 — o admin faz a transferência manualmente e só registra
+aqui. Automação via API de transferência (ex: PIX programático) fica
+pra uma fase futura, se necessário.
+
+
+3.1 APROVAÇÃO DE ATIVAÇÃO DO CLUBE DE LAVAGEM (ver task-5, seção 5)
+----------------------------------------------------------------------------
+Tela admin car-wash-product-subscriptions.index/show, filtro por
+status='pending' (product='clube_lavagem'):
+  - Mostra o car_wash e o payout_plan escolhido.
+  - Ação "Aprovar" (POST /admin/car-wash-product-subscriptions/{id}/approve):
+    status->'active', activated_at=now(), approved_by=admin atual.
+    Auditable.
+  - Ação "Rejeitar" (POST /admin/car-wash-product-subscriptions/{id}/reject):
+    status->'canceled', exige motivo. Auditable.
+
+
+3.2 PROCESSAMENTO DE CANCELLATION_REQUESTS (ver task-8, seção 2, passo 8)
+----------------------------------------------------------------------------
+Tela admin cancellation-requests.index/show, filtro por status='pending':
+  - Mostra quem pediu, o motivo, e o wash_redemption (ou parking_session,
+    task-10) em questão.
+  - Ação "Aprovar" (POST /admin/cancellation-requests/{id}/approve):
+    - marca a cancellation_request como status='approved',
+      resolved_by_user_id=admin atual, resolved_at=now().
+    - marca o wash_redemption como status='canceled'.
+    - se o subscription_cycle daquela lavagem ainda for o CICLO ATUAL
+      da assinatura (ainda não renovou), devolve a cota:
+      quota_used -= 1. Se o ciclo já foi fechado/renovado, NÃO mexe em
+      quota_used do ciclo novo — a cota já foi resolvida no momento da
+      renovação, devolver criaria inconsistência entre ciclos (limitação
+      conhecida da v1, documentar se virar reclamação recorrente).
+    - se a lavagem AINDA NÃO entrou em nenhum payout_item (payout_item_id
+      is null): nada mais a fazer, ela simplesmente não entra no próximo
+      payouts:generate.
+    - se JÁ entrou num payout_item de um payout ainda 'pending': remove
+      o payout_item e recalcula o total_amount_cents do payout.
+    - se o payout já está 'paid': NÃO tenta estornar automaticamente —
+      fica como pendência manual pro admin resolver na próxima rodada
+      de repasse (compensar no lote seguinte). Documentar isso na tela
+      pro admin não achar que o sistema já resolveu sozinho.
+  - Ação "Rejeitar" (POST /admin/cancellation-requests/{id}/reject):
+    status='rejected', exige motivo — a wash_redemption permanece
+    'completed' sem nenhuma mudança.
+
+  Ambas as ações são Auditable (cancellation_requests já está na lista
+  da task-3, seção 5).
+
+
+4. PAINEL DO LAVA-RÁPIDO
+------------------------------
+Tela "Repasses" (/painel/repasses):
+  - Histórico de payouts recebidos por aquele car_wash (status, período,
+    valor total).
+  - Detalhe de um payout: lista de payout_items (quais lavagens
+    compuseram aquele valor) — permite conferência/disputa.
+
+
+5. NOTIFICAÇÕES
+--------------------
+  - Payout gerado (e-mail pro lava-rápido: "você tem R$X a receber
+    referente ao período Y")
+  - Payout marcado como pago (confirmação)
+
+
+6. ROTAS (RESUMO)
+-----------------------
+Admin (verbos em inglês, padronizado com as ações da task-5 e as
+permissões já nomeadas em inglês na task-11 — payouts.mark-paid etc.):
+  GET  /admin/payouts
+  GET  /admin/payouts/{payout}
+  POST /admin/payouts/{payout}/mark-paid
+  POST /admin/payouts/{payout}/mark-failed
+  GET  /admin/car-wash-product-subscriptions
+  GET  /admin/car-wash-product-subscriptions/{id}
+  POST /admin/car-wash-product-subscriptions/{id}/approve
+  POST /admin/car-wash-product-subscriptions/{id}/reject
+  GET  /admin/cancellation-requests
+  GET  /admin/cancellation-requests/{id}
+  POST /admin/cancellation-requests/{id}/approve
+  POST /admin/cancellation-requests/{id}/reject
+
+Lava-rápido (auth, car_wash_users):
+  GET  /painel/repasses
+  GET  /painel/repasses/{payout}
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(payout): comando payouts:generate com percentual por satisfaction_score"
+  2. "feat(payout): tela admin de repasses (mark-paid/mark-failed)"
+  3. "feat(payout): aprovação de ativação do clube de lavagem (car-wash-product-subscriptions)"
+  4. "feat(payout): processamento de cancellation_requests pelo admin"
+  5. "feat(payout): painel do lava-rápido de repasses recebidos"
+
+Testar o comando payouts:generate rodando 2x seguidas sem novas
+lavagens (deve ser idempotente, sem gerar payout duplicado) ANTES de
+commitar como concluído.
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

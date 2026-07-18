@@ -1,0 +1,217 @@
+TASK 12 - Site institucional / marketing: "Celke Wash Club"
+========================================================================
+
+OBJETIVO
+--------
+Criar as páginas públicas de divulgação da marca "Celke Wash Club",
+com dois públicos-alvo em hierarquia clara e proposital:
+
+  PRIMÁRIO (destaque total)    -> consumidor final: quer assinar o
+                                 clube pra lavar o carro em qualquer
+                                 lava-rápido afiliado.
+  SECUNDÁRIO (segundo plano)   -> lava-rápidos e estacionamentos que
+                                 querem se afiliar/contratar o módulo
+                                 de estacionamento.
+
+Nome escolhido: "Celke Wash Club" — evita a confusão com o "Clube
+Celke" já existente no ecossistema Celke Nota de Corte (sistema de
+pontos para concursos públicos, produto totalmente diferente).
+
+
+1. DECISÃO DE ARQUITETURA: NÃO é um projeto separado
+------------------------------------------------------------
+Diferente do ecossistema maior Celke Nota de Corte (que separa
+adm/site/evolucao/payments em 4 projetos), aqui o "site" é só o
+conjunto de PÁGINAS PÚBLICAS do mesmo projeto Laravel criado na task-1
+— as rotas /planos (task-7) e /parceiros/cadastro (task-5) já existem
+nele. Não há necessidade de duplicar app/sessão/deploy pra um produto
+único como este. Este task-12 cobre a HOME e páginas institucionais
+que ainda não tinham desenho (landing, como funciona, sobre, contato),
+usando o mesmo layout público já mencionado na task-4
+(layouts/public.blade.php).
+
+
+2. ESTRUTURA DA HOME (HIERARQUIA VISUAL: ASSINANTE PRIMEIRO)
+--------------------------------------------------------------------
+
+Seção 1 — Hero (topo da página, maior destaque)
+  - Headline voltada 100% pro consumidor final, ex: "Lave seu carro
+    quando quiser, em qualquer lava-rápido parceiro, por uma
+    mensalidade só."
+  - Subheadline reforçando o benefício (sem precisar andar/pesquisar
+    lava-rápido de confiança toda vez, um preço fixo previsível).
+  - CTA primário grande: "Ver planos" / "Assinar agora" -> /planos
+    (task-7). Usar a cor Primária (task-6, .btn-primary).
+  - Imagem/ilustração de carro sendo lavado (não de estacionamento).
+
+Seção 2 — Como funciona (3 passos, focado no assinante)
+  1. Escolha seu plano
+  2. Escolha o lava-rápido mais perto (entre os afiliados aprovados)
+  3. Resgate sua lavagem com um código no balcão
+  (Corresponde exatamente ao fluxo já implementado nas tasks 7 e 8 —
+  não inventar passo que não existe no produto.)
+
+Seção 3 — Planos e preços
+  - Lista os plans ativos (mesma query pública de /planos, pode ser a
+    própria seção embutida na home com link "ver todos os planos").
+  - Cada card de plano, de cima pra baixo: nome do plano, preço,
+    cota de lavagens (wash_quota + quota_period), e logo abaixo a
+    lista de VANTAGENS — as plan_features com active=true daquele
+    plano, ordenadas por sort_order, uma por linha com um ícone de
+    check (✓, cor Success da task-6) na frente de cada texto. É esse
+    bloco de vantagens que diferencia visualmente "Básico" de
+    "Premium" pro cliente, não só o preço/cota.
+  - Se o admin ainda não cadastrou nenhuma plan_feature pro plano (ou
+    todas estão inativas), o card simplesmente não mostra a seção de
+    vantagens — não exibir "nenhuma vantagem cadastrada" nem qualquer
+    placeholder, pra não parecer que o plano é fraco.
+  - Como o texto de cada vantagem é 100% controlado pelo admin (task-11),
+    não há nenhum texto fixo/hardcoded de benefício aqui no site — se o
+    admin mudar/reordenar as vantagens no painel, a home e a /planos
+    (task-7) refletem na próxima requisição, sem cache intermediário
+    (é uma query direta, não precisa de invalidação de cache pra v1).
+
+Seção 4 — Lava-rápidos participantes (prova social, ainda voltada pro
+assinante — "veja onde você pode usar")
+  - Lista/mapa dos car_washes com status='approved' e
+    car_wash_product_subscriptions (product='clube_lavagem',
+    status='active'). Foco da seção é mostrar ABRANGÊNCIA pro cliente
+    ("tem lava-rápido perto de você"), não recrutar novos parceiros.
+
+Seção 5 — FAQ (perguntas do assinante: como cancelo, o que acontece se
+não usar toda a cota, funciona em qualquer lava-rápido mesmo?)
+
+Seção 6 — Seção secundária de parceria (deliberadamente MAIS ABAIXO na
+página, visual mais discreto — menos espaço, sem imagem grande, cor
+Secondary/neutra em vez da Primária):
+  - Texto curto: "Tem um lava-rápido ou estacionamento? Seja parceiro
+    Celke Wash Club e ganhe uma fonte extra de clientes."
+  - CTA secundário, menor: "Quero ser parceiro" -> /parceiros/cadastro
+    (task-5). Usar .btn-secondary (task-6), nunca a cor Primária —
+    reforça visualmente que não é o foco principal da página.
+
+Footer:
+  - Links institucionais (sobre, termos, privacidade, contato)
+  - Repetir o link de parceria em texto pequeno (ex: "É dono de
+    lava-rápido? Cadastre-se aqui"), mas sem novo CTA chamativo.
+
+
+3. PÁGINAS INSTITUCIONAIS ADICIONAIS
+------------------------------------------
+  - /sobre (o que é o Celke Wash Club, proposta de valor)
+  - /termos-de-uso, /privacidade (obrigatório por causa de dados
+    pessoais/pagamento — LGPD)
+  - /contato (formulário simples ou e-mail/telefone)
+
+Não é necessário página institucional dedicada pra parceria — a seção
+6 da home + a própria tela /parceiros/cadastro (task-5) já bastam,
+manter a divulgação de parceria discreta em TODA a navegação, não só na
+home (ex: não colocar "Seja parceiro" no menu principal de topo; deixar
+só no footer/seção secundária).
+
+
+4. NAVEGAÇÃO (MENU DE TOPO)
+----------------------------------
+  [logo.png] Celke Wash Club | Como funciona | Planos | Lava-rápidos | FAQ
+  -> [Entrar] [Assinar agora] (CTA primário destacado)
+
+  A logo é a public/images/logo.png copiada na task-1 (ver task-6,
+  seção 3.1, sobre o asset e o cuidado de redimensionar via
+  width/height no HTML antes de usar aqui — no menu de topo ela é
+  pequena, não os 500x500 originais). Link da logo aponta pra home (/).
+
+  Propositalmente SEM "Seja parceiro" no menu de topo — mantém o
+  público de lava-rápido em segundo plano, conforme pedido. Quem
+  procura ativamente por parceria acha pela seção 6 ou pelo footer.
+
+
+5. SEO E METADADOS
+------------------------
+  - <link rel="icon" href="{{ asset('favicon.ico') }}"> no <head> desta
+    e de todas as páginas públicas (favicon copiado na task-1).
+  - title/meta description de cada página voltados pro termo de busca
+    do consumidor final ("clube de lavagem de carro", "assinatura
+    lava-rápido"), não pro termo de lava-rápido parceiro.
+  - Open Graph (og:title/og:image) usando a imagem de carro sendo
+    lavado (hero), não imagem de estacionamento. A logo.png (500x500,
+    quadrada) serve bem como og:image de fallback se não houver imagem
+    de hero específica pronta ainda — verificar antes se o tamanho
+    500x500 atende o formato recomendado pelas redes sociais (Open
+    Graph recomenda proporção próxima de 1.91:1 pra melhor exibição em
+    compartilhamentos; uma imagem quadrada aparece cortada em alguns
+    previews — se isso importar, gerar uma versão recortada específica
+    pra og:image em vez de reusar a logo quadrada direto).
+  - Sitemap.xml incluindo home, planos, sobre, termos, privacidade,
+    contato (não precisa indexar /parceiros/cadastro com prioridade
+    alta — página de conversão, não de descoberta orgânica).
+
+  - robots.txt (public/robots.txt, servido estático pelo Laravel, sem
+    rota nem controller — mesma ideia já usada no
+    celke-nota-corte-administrativo-v1-site/public/robots.txt):
+    libera busca geral, bloqueia os bots de treinamento de IA
+    (reaproveitando a mesma lista do outro projeto Celke) e desalinha
+    explicitamente as áreas autenticadas/transacionais, que não têm
+    link público levando a elas mas não custa reforçar:
+
+      User-agent: *
+      Disallow: /admin
+      Disallow: /painel
+      Disallow: /assinatura
+      Disallow: /veiculos
+      Disallow: /indicacoes
+      Disallow: /fidelidade
+      Disallow: /notificacoes
+      Disallow: /lavagem
+      Disallow: /pedidos
+      Disallow: /webhooks
+      Disallow: /planos/*/checkout
+
+      User-agent: GPTBot
+      Disallow: /
+
+      User-agent: ClaudeBot
+      Disallow: /
+
+      User-agent: CCBot
+      Disallow: /
+
+      User-agent: Bytespider
+      Disallow: /
+
+      Sitemap: https://SEU-DOMINIO-AQUI/sitemap.xml
+
+    Ajustar a URL do Sitemap pro domínio real assim que ele existir
+    (mesmo cuidado de placeholder já usado no README da task-1). A
+    lista de bots de IA bloqueados é a mesma do
+    celke-nota-corte-administrativo-v1-site — se esse projeto passar a
+    bloquear mais bots no futuro, replicar aqui também (não há
+    mecanismo automático de sincronização entre os dois, é cópia
+    manual mesmo).
+
+
+6. IDENTIDADE VISUAL
+--------------------------
+Reaproveita 100% a paleta e as classes definidas na task-6 (Tailwind,
+cores herdadas do adm). Nenhuma cor nova criada aqui — a diferenciação
+entre CTA primário (assinante) e secundário (parceria) já é resolvida
+pelas classes existentes (.btn-primary vs .btn-secondary), sem precisar
+inventar uma terceira cor de "marca do site".
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(site): home institucional com hero focado no assinante"
+  2. "feat(site): seção de como funciona, planos (com vantagens/plan_features) e lava-rápidos participantes"
+  3. "feat(site): seção secundária de parceria (discreta) + páginas institucionais"
+     (sobre, termos, privacidade, contato)
+  4. "feat(site): SEO (meta tags, Open Graph, sitemap.xml, robots.txt)"
+
+
+PRÓXIMOS PASSOS
+--------------------
+- task-13: testes automatizados (Pest/PHPUnit)
+
+Este task-12 encaixa-se depois que /planos (task-7) e /parceiros/cadastro
+(task-5) já existirem, já que a home depende dessas rotas. Ver
+orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

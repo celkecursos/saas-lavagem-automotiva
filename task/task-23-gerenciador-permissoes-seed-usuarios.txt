@@ -1,0 +1,148 @@
+TASK 23 - Gerenciador de permissões (superadmin) + seed de usuários
+================================================================================
+
+OBJETIVO
+--------
+A task-3 (seção 6) já instalou o spatie/laravel-permission, o
+Gate::before do Super Admin e o PermissionSeeder/RoleSeeder completos
+(precisou ser antecipado pra lá porque rotas de tasks anteriores a esta
+já dependiam do middleware permission:*). Mas nunca existiu uma TELA
+pra gerenciar isso — hoje só dá pra mudar via seeder/tinker, redeploy.
+Esta task adiciona o gerenciador de papéis/permissões pro superadmin
+(replicando o mesmo padrão já usado no projeto adm do ecossistema
+Celke) e cria o seeder com os usuários de TESTE/demonstração do
+projeto (esse sim, novo aqui).
+
+
+1. PADRÃO REPLICADO DO PROJETO ADM
+-----------------------------------------
+Levantado no próprio celke-nota-corte-administrativo-v1-adm:
+
+  - RoleController: CRUD de papéis (index/create/store/edit/update/
+    destroy) + updateOrder (reordena papéis; o papel "Super Admin" é
+    sempre order=1 e não pode ter a ordem alterada).
+  - PermissionController: CRUD de permissions (title + name) — lista
+    simples, sem agrupamento por módulo.
+  - RolePermissionController: a tela de ATRIBUIR permissions a um
+    papel — index($role) lista TODAS as permissions com um indicador
+    "Liberado"/"Bloqueado" por linha; update($role, $permission) faz
+    TOGGLE (givePermissionTo/revokePermissionTo) e redireciona de
+    volta. Bloqueia explicitamente essa tela quando $role->name ==
+    'Super Admin' (não há o que atribuir — ver item 2).
+  - Gate::before em AppServiceProvider: quem tem o papel 'Super Admin'
+    passa em QUALQUER ability automaticamente, sem precisar de cada
+    permission atribuída uma a uma.
+  - Middleware permission:<nome-da-permission> em cada rota
+    individualmente (não em grupo).
+
+Replicar essa MESMA estrutura aqui, só adaptando os nomes de permission
+já usados nas tasks deste projeto (convenção "recurso.acao", ex.
+car-washes.approve — diferente do "acao-recurso" hifenizado do adm,
+mas a ideia é a mesma).
+
+
+2. GATE::BEFORE (JÁ INSTALADO NA TASK-3, SEÇÃO 6)
+---------------------------------------------------------
+O bypass total do Super Admin (`Gate::before` no AppServiceProvider) já
+foi feito na task-3 — aqui só usamos o resultado dele:
+RolePermissionController::index() bloqueia o acesso à tela de
+atribuição quando a role é 'Super Admin' (não há o que atribuir, ele já
+passa em tudo), igual ao adm.
+
+
+3. PERMISSIONS DE GERENCIAMENTO (JÁ SEEDADAS NA TASK-3)
+------------------------------------------------------------------
+  roles.index / .create / .edit / .destroy / .update-order
+  permissions.index / .create / .edit / .destroy
+  role-permissions.index / .update
+
+Essas 3 linhas já existem no banco desde a task-3 (seção 6, lista
+consolidada) — aqui só construímos as TELAS que as usam. Reservadas de
+propósito: o RoleSeeder (também já na task-3) só dá essas permissions
+pro papel "Super Admin" (via bypass do Gate::before, nem precisa
+atribuir de fato) — o papel "Administrador" NÃO as recebe, então não vê
+"Papéis"/"Permissões" no menu (task-14, sidebar condicional por
+permission). Se um dia precisar que outro papel administre isso
+também, é só o Super Admin ir na tela e atribuir — sem precisar de
+código novo.
+
+
+4. ROTAS (RESUMO)
+-----------------------
+Admin (cada rota com seu próprio middleware permission:<nome>):
+  GET/POST  /admin/roles
+  GET/PUT   /admin/roles/{role}
+  DELETE    /admin/roles/{role}
+  POST      /admin/roles/{role}/update-order
+  GET/POST  /admin/permissions
+  GET/PUT   /admin/permissions/{permission}
+  DELETE    /admin/permissions/{permission}
+  GET       /admin/role-permissions/{role}
+  GET       /admin/role-permissions/{role}/{permission}   (toggle)
+
+
+5. PERMISSIONSEEDER E ROLESEEDER (JÁ FEITOS NA TASK-3, SEÇÃO 6)
+------------------------------------------------------------------------
+Não recriar aqui — a lista completa de permissions e os papéis "Super
+Admin"/"Administrador" já foram semeados na task-3, precisamente porque
+rotas de tasks anteriores a esta (4, 5, 9) já dependiam deles existindo.
+Esta task só constrói as telas (seção 1-4) que permitem alterar isso
+pelo navegador dali em diante, sem precisar de tinker/redeploy.
+
+
+6. USERSEEDER (USUÁRIOS DE TESTE/DEMONSTRAÇÃO)
+------------------------------------------------------
+ATENÇÃO: senha única e e-mails fixos — só pra ambiente de
+desenvolvimento/demonstração/gravação de vídeo. NUNCA rodar este
+seeder específico (ou pelo menos esta senha) num ambiente de produção
+real com dados verdadeiros.
+
+  Senha (todos, via bcrypt): 123456A#b
+
+  cesar@celke.com.br
+    - users.role = 'admin'
+    - Spatie role: 'Super Admin'
+
+  kelly@celke.com.br
+    - users.role = 'admin'
+    - Spatie role: 'Administrador'
+
+  jessica@celke.com.br
+    - users.role = 'user'
+    - Sem Spatie role (painel do lava-rápido não usa Spatie, task-14) —
+      em vez disso, o seeder cria um car_washes de exemplo
+      (status='approved', product 'estacionamento' com
+      status='active') e vincula jessica em car_wash_users
+      (role='owner'). Ela loga e acessa o painel do lava-rápido, módulo
+      de estacionamento, já com dados de exemplo pra demonstrar sem
+      precisar montar o cadastro na hora de uma gravação.
+
+  gabrielly@celke.com.br
+    - users.role = 'user'
+    - Seeder cria um plans de exemplo (se ainda não existir um seed de
+      planos) e uma subscriptions ativa + subscription_cycles pra ela
+      — assinante de demonstração já pronta pra usar o clube de
+      lavagem sem precisar assinar na hora.
+
+
+7. DOCUMENTAÇÃO (AJUSTE NA task-1/README, JÁ FEITO)
+------------------------------------------------------------
+orientacao.txt e o README.md gerado na task-1 (Passo 5) já documentam
+esses 4 usuários e a senha única — nada a fazer aqui além de manter
+sincronizado se os e-mails/senha mudarem no futuro.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(admin): CRUD de roles e permissions (RoleController, PermissionController)"
+  2. "feat(admin): tela de atribuição de permissions por papel (RolePermissionController)"
+  3. "feat(seed): UserSeeder com os 4 usuários de teste (cesar/kelly/jessica/gabrielly)"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks — esta task
+depende da task-3 (spatie/laravel-permission, Gate::before e
+PermissionSeeder/RoleSeeder já instalados/seedados ali, seção 6),
+task-5 (car_washes/car_wash_users) e task-7 (plans/subscriptions) já
+existirem, já que o UserSeeder popula dados dessas tabelas.

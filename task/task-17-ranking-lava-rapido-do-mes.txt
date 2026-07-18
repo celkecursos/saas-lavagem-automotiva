@@ -1,0 +1,78 @@
+TASK 17 - Ranking público "Lava-rápido do mês"
+====================================================
+
+OBJETIVO
+--------
+Tela pública de leaderboard mostrando os lava-rápidos mais bem
+avaliados do mês corrente. Zero schema novo — já temos tudo
+(car_wash_ratings, satisfaction_score) desde as tasks 8/9; esta task é
+só uma query + uma view.
+
+
+1. REGRA DO RANKING (SEM SCHEMA NOVO)
+--------------------------------------------
+Diferente de car_washes.satisfaction_score (média HISTÓRICA, usada pro
+cálculo de repasse na task-9), o ranking "do mês" é uma janela móvel:
+média de car_wash_ratings.score criadas DENTRO do mês corrente,
+recalculada ao vivo a cada requisição (não precisa de tabela de
+histórico/cache na v1 — o volume não justifica).
+
+Query (WashRankingService::topOfMonth()):
+  - car_washes com status='approved' E
+    car_wash_product_subscriptions (product='clube_lavagem',
+    status='active')
+  - JOIN car_wash_ratings WHERE created_at NO MÊS CORRENTE
+  - GROUP BY car_wash, HAVING count(*) >= config('wash-club.
+    min_ratings_for_ranking') (padrão 5 — evita que 1 avaliação 5
+    estrelas isolada coloque um lava-rápido no topo)
+  - ORDER BY avg(score) DESC
+  - LIMIT 10
+
+O mínimo de avaliações fica em config (config/wash-club.php), não em
+tabela de banco — é uma constante de regra de negócio que não precisa
+de tela de admin pra mudar na v1 (se precisar ficar editável em runtime
+depois, migra pra uma settings table, mesmo padrão já usado em
+parking_billing_settings).
+
+
+2. TELA PÚBLICA
+--------------------
+/ranking:
+  - Lista os top 10 do mês corrente: posição, nome do lava-rápido,
+    cidade, nota média do mês (arredondada), badge "🏆 Lava-rápido do
+    mês" só no #1.
+  - Sem posições reservas pra quem não atingiu o mínimo de avaliações
+    (não aparece "quase lá", só não aparece).
+  - Link a partir da home institucional (task-12) — reforça a seção 4
+    da home ("lava-rápidos participantes") com prova social adicional:
+    "veja o ranking completo".
+
+
+3. LIMITAÇÃO CONHECIDA (DOCUMENTADA DE PROPÓSITO)
+------------------------------------------------------------
+Não existe histórico de vencedores anteriores na v1 (ex: "campeão de
+Janeiro/2026") — o ranking é sempre o do mês CORRENTE, recalculado ao
+vivo. Se quiser um "mural de campeões" no futuro, aí sim precisa de uma
+tabela nova (ex: monthly_car_wash_awards, congelando o #1 no fechamento
+de cada mês) — fica como ideia de v2, não necessário pro objetivo desta
+task.
+
+
+4. ROTAS (RESUMO)
+-----------------------
+Público:
+  GET /ranking
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(ranking): WashRankingService (top 10 do mês corrente)"
+  2. "feat(ranking): tela pública /ranking"
+  3. "feat(site): link do ranking na home institucional"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks — esta task
+depende de car_wash_ratings existir (task-8) e da home institucional
+(task-12) pro link cruzado.

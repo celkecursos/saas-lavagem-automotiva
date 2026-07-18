@@ -1,0 +1,227 @@
+TASK 10 - Módulo de gerenciador de estacionamento
+========================================================
+
+OBJETIVO
+--------
+Implementar o produto independente de estacionamento (entidades já
+modeladas na task-3, seção 4): cadastro do estacionamento, tarifas,
+operação de entrada/saída de veículo e relatório simples de ocupação/
+faturamento. Só disponível para car_washes com
+car_wash_product_subscriptions (product='estacionamento',
+status='active') — independente do clube de lavagem, conforme decidido
+na task-2. Monetização deste módulo definida na seção 5 abaixo.
+
+
+1. CADASTRO DO ESTACIONAMENTO
+------------------------------------
+Painel do lava-rápido, tela "Meu estacionamento" (só visível se o
+produto 'estacionamento' estiver ativo — task-5, seção 5):
+  - Criar/editar parking_lots (name, total_spots).
+  - Um car_wash pode ter mais de um parking_lot (schema já suporta),
+    mas a v1 assume o caso comum de 1 por lava-rápido — não impedir
+    mais de um, só não construir UI extra pra isso agora.
+
+parking_spots (vaga a vaga) fica ADIADA pra v2, conforme já decidido na
+task-3 — a v1 controla ocupação só por contagem
+(total_spots - sessões abertas), sem mapear vaga individual.
+
+
+2. CADASTRO DE TARIFAS
+----------------------------
+Tela "Tarifas" (parking_rates):
+  - name (ex: "Diária", "Hora avulsa")
+  - unit: 'hour' | 'day' | 'fraction'
+  - price_cents
+  - tolerance_minutes (ex: 10 min grátis antes de começar a cobrar)
+  - active
+
+Pelo menos 1 tarifa ativa é obrigatória antes de operar entradas.
+
+
+3. OPERAÇÃO — ENTRADA DE VEÍCULO
+----------------------------------------
+Tela "Nova entrada" (/painel/estacionamento/entrada):
+  - Funcionário digita a placa.
+  - Sistema valida: existe vaga livre? (total_spots - count de
+    parking_sessions status='open' daquele parking_lot > 0). Se não
+    houver vaga, bloquear e avisar "estacionamento lotado".
+  - Escolhe a tarifa (ou usa uma tarifa padrão marcada no parking_lot,
+    se só houver uma ativa, pular a escolha).
+  - Cria parking_sessions (plate, entry_at=now(), status='open',
+    parking_rate_id).
+
+
+4. OPERAÇÃO — SAÍDA DE VEÍCULO
+----------------------------------------
+Tela "Saída" (/painel/estacionamento/saida):
+  - Funcionário busca a sessão aberta por placa.
+  - Sistema calcula amount_charged_cents:
+      duração = exit_at (now) - entry_at
+      minutos_cobráveis = max(0, duração_em_minutos - tolerance_minutes)
+      conforme unit da tarifa:
+        'hour'     -> arredonda pra cima em horas cheias * price_cents
+        'day'      -> arredonda pra cima em dias cheios * price_cents
+        'fraction' -> cobra por fração definida na tarifa (ex: 15 em 15
+                     min) * price_cents
+  - Funcionário confirma -> parking_sessions.status='closed',
+    exit_at=now(), amount_charged_cents calculado.
+  - payment_method (enum: 'cash', 'card', 'pix'), preenchido pelo
+    funcionário no momento do fechamento — o pagamento em si acontece
+    fisicamente no local (dinheiro, maquininha própria do lava-rápido
+    ou Pix direto), o sistema só REGISTRA o método e o valor pra fins
+    de relatório. Não há integração de cobrança aqui (diferente do
+    clube de lavagem, que paga a PLATAFORMA — aqui quem cobra é o
+    próprio lava-rápido, direto do cliente do estacionamento).
+
+  AJUSTE NO SCHEMA DA TASK-3:
+    parking_sessions
+      ...
+      payment_method     enum: 'cash', 'card', 'pix', nullable
+                         (preenchido só no fechamento da sessão)
+
+
+4.1 SOLICITAÇÃO DE CANCELAMENTO DE SESSÃO JÁ FECHADA
+----------------------------------------------------------
+Mesmo padrão da task-8/task-9 pro clube de lavagem: depois que uma
+parking_session vira 'closed', nem o funcionário nem o cliente do
+estacionamento podem simplesmente alterar o valor cobrado ou reabrir a
+sessão sozinhos. Qualquer um pode abrir uma cancellation_request
+(requestable_type=ParkingSession, reason obrigatório) — ex: cobrança
+errada por engano na tarifa, ou fechamento de veículo errado.
+
+Fica em status='pending' até o admin decidir (mesma tela
+cancellation-requests.index/show da task-9). Aprovado ->
+parking_sessions.status='canceled'; rejeitado -> sem mudança. Como não
+há repasse da plataforma envolvido aqui (o dinheiro do estacionamento
+vai direto pro lava-rápido), aprovar só corrige o registro pra fins de
+relatório/auditoria — não movimenta nenhum valor entre contas.
+
+
+5. MONETIZAÇÃO DO ESTACIONAMENTO (RESOLVIDO 2026-07-16)
+--------------------------------------------------------------
+Regra definida pelo usuário: o estacionamento é GRATUITO para o
+lava-rápido enquanto o volume de lavagens do clube prestadas por ele
+for pelo menos igual à capacidade do estacionamento (nº de vagas).
+Abaixo disso, cobra um percentual por carro estacionado. Tabelas
+`parking_billing_settings` e `parking_billing_charges` definidas na
+task-3, seção 4.1.
+
+Referência de mercado pesquisada: a SpotHero (maior marketplace de
+estacionamento dos EUA) cobra 15% de comissão (20% em reservas por hora
+abaixo de US$10) [SpotHero-like Parking App Development](https://www.a3logics.com/blog/spothero-like-parking-app-development-cost/).
+Adotamos um percentual padrão MENOR (10%, configurável pelo admin em
+`parking_billing_settings`) porque, diferente de um marketplace puro, a
+plataforma aqui não traz o cliente do estacionamento — só fornece o
+sistema de gestão e a auditoria; o lava-rápido já tem seu próprio fluxo
+de clientes de estacionamento.
+
+Comando artisan parking-billing:evaluate {--period=monthly}, rodado
+pelo scheduler (mesmo cuidado da task-9 sobre schedule:work rodando de
+verdade), cobrindo o período anterior, POR CAR_WASH que tenha o produto
+'estacionamento' ativo:
+
+  1. wash_count = contagem de wash_redemptions 'completed' do car_wash
+     no período (mesma fonte usada no repasse da task-9).
+  2. total_spots_snapshot = soma de parking_lots.total_spots daquele
+     car_wash.
+  3. parking_sessions_count = contagem de parking_sessions 'closed' no
+     período.
+  4. is_free = wash_count >= total_spots_snapshot.
+  5. Verificação ANTIFRAUDE (pedida explicitamente pelo usuário —
+     "verificar se o estacionamento não está enganando"): se
+     parking_sessions_count > total_spots_snapshot ×
+     max_turns_per_day_per_spot × dias_do_período (parâmetro
+     configurável em parking_billing_settings, padrão 6 giros/vaga/dia
+     — um teto generoso pra um estacionamento de giro rápido),
+     flagged_for_review = true. Isso indica que o nº de vagas
+     declarado é incompatível com o volume real de carros
+     estacionados — ou o lava-rápido está subdeclarando vagas pra
+     ficar sempre no wash_count >= total_spots (gratuito mais fácil de
+     alcançar com poucas vagas declaradas), ou há algum outro uso
+     indevido do sistema. NÃO bloqueia a cobrança automaticamente — só
+     entra numa fila própria de revisão do admin (ver task-11).
+  6. Cria parking_billing_charges com os valores acima.
+     - Se is_free: status='free', sem order.
+     - Se não: fee_amount_cents = round(soma de amount_charged_cents
+       das parking_sessions 'closed' do período × fee_percentage),
+       status='pending', cria um `orders` (payable_type=
+       ParkingBillingCharge, user_id=owner do car_wash,
+       amount_cents=fee_amount_cents) e chama
+       PaymentGatewayFactory::make()->createCheckout($order) — reusa
+       o MESMO fluxo de pagamento já construído na task-4 (o
+       lava-rápido paga a taxa como se fosse um checkout normal).
+  7. Ao confirmar o pagamento (webhook 'paid'): parking_billing_charges
+     .status='paid' (espelha o order).
+
+Idempotente: rodar 2x no mesmo período sem novos dados não deve gerar
+cobrança duplicada (checar se já existe parking_billing_charges pra
+aquele car_wash+período antes de criar outra).
+
+
+6. RELATÓRIOS
+------------------
+Tela "Relatório" (/painel/estacionamento/relatorio), filtro por período:
+  - faturamento total (soma de amount_charged_cents das sessões
+    fechadas no período)
+  - quantidade de veículos atendidos
+  - taxa de ocupação média (aproximada: sessões abertas / total_spots ao
+    longo do tempo — cálculo simples de amostragem, não precisa ser
+    contínuo/streaming na v1)
+  - status de monetização do período atual (gratuito ou % cobrado,
+    puxado do último parking_billing_charges)
+
+
+7. NOTIFICAÇÕES
+--------------------
+Não é necessário e-mail pra esse módulo na v1 — é operação síncrona,
+presencial, sem contraparte remota esperando confirmação (diferente do
+clube de lavagem, onde o assinante não está fisicamente esperando o
+sistema responder). Exceção: notificar o lava-rápido quando um
+parking_billing_charges não-gratuito for gerado (precisa pagar a
+plataforma) e quando o pagamento for confirmado.
+
+
+8. ROTAS (RESUMO)
+-----------------------
+Painel do lava-rápido (auth, car_wash_users, produto 'estacionamento'
+ativo):
+  GET  /painel/estacionamento                    (dashboard: vagas
+                                                  livres/ocupadas)
+  GET  /painel/estacionamento/tarifas
+  POST /painel/estacionamento/tarifas
+  GET  /painel/estacionamento/entrada
+  POST /painel/estacionamento/entrada
+  GET  /painel/estacionamento/saida
+  POST /painel/estacionamento/{parkingSession}/saida
+  POST /painel/estacionamento/{parkingSession}/solicitar-cancelamento
+  GET  /painel/estacionamento/relatorio
+  GET  /painel/estacionamento/cobrancas          (histórico de
+                                                  parking_billing_charges
+                                                  daquele car_wash)
+
+Admin:
+  GET  /admin/parking-billing-settings/edit      (singleton — % e
+                                                  giros/vaga/dia)
+  PUT  /admin/parking-billing-settings
+  GET  /admin/parking-billing-charges            (fila, filtro
+                                                  flagged_for_review)
+  GET  /admin/parking-billing-charges/{id}
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(parking): migration payment_method em parking_sessions"
+  2. "feat(parking): cadastro de estacionamento e tarifas"
+  3. "feat(parking): entrada de veículo"
+  4. "feat(parking): saída de veículo e cálculo de valor"
+  5. "feat(parking): solicitação de cancelamento de sessão fechada"
+  6. "feat(parking): comando parking-billing:evaluate (gratuidade x cobrança + antifraude)"
+  7. "feat(parking): checkout da cobrança via PaymentGatewayFactory"
+  8. "feat(parking): tela admin de configurações e revisão de cobranças sinalizadas"
+  9. "feat(parking): relatório de ocupação e faturamento"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

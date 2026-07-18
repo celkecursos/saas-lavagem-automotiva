@@ -1,0 +1,67 @@
+TASK 18 - Toggle dark/light mode
+======================================
+
+OBJETIVO
+--------
+Botão de alternar tema claro/escuro, persistindo a escolha do usuário.
+A task-6 já desenhou TODAS as cores em variante dark: (Tailwind
+darkMode: 'class') — falta só o botão e a lógica de ligar/desligar a
+classe "dark" no <html> e lembrar a escolha entre visitas.
+
+
+1. DEPENDÊNCIA JÁ ATENDIDA
+--------------------------------
+- tailwind.config.js precisa ter darkMode: 'class' (a task-6 já
+  pressupõe isso ao descrever "classe dark no <html>").
+- Alpine.js já vem disponível por padrão no scaffold Breeze do Laravel
+  (task-1) — não é dependência nova.
+
+
+2. COMPORTAMENTO
+---------------------
+Botão (ícone sol/lua) no header dos 3 layouts (admin, painel do
+lava-rápido — task-14 — e público — task-12):
+
+  x-data="{
+    dark: localStorage.getItem('theme')
+      ? localStorage.getItem('theme') === 'dark'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches
+  }"
+  x-init="$watch('dark', v => {
+    document.documentElement.classList.toggle('dark', v);
+    localStorage.setItem('theme', v ? 'dark' : 'light');
+  }); document.documentElement.classList.toggle('dark', dark)"
+
+Regra de precedência:
+  1. Se o usuário já escolheu antes (localStorage tem "theme"): usa
+     essa escolha, ignora o sistema operacional.
+  2. Se nunca escolheu: segue prefers-color-scheme do sistema.
+  3. A partir do primeiro clique no botão, a escolha manual passa a
+     valer sempre (fica salva no localStorage).
+
+Sem persistir no banco de dados na v1 — é preferência de dispositivo/
+browser (localStorage), não de conta. Se um dia fizer sentido persistir
+por usuário (ex: mesma preferência em qualquer aparelho), vira uma
+coluna nullable em users (ex: theme_preference), mas não é necessário
+agora.
+
+
+3. ONDE O BOTÃO APARECE
+--------------------------------
+  - Header do painel do admin (task-11/14)
+  - Header do painel do lava-rápido (task-5/14)
+  - Header do site público (task-12) — inclusive pra quem não está
+    logado, já que a home é a página mais vista/gravada em vídeo.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(ui): toggle dark/light mode com persistência em localStorage"
+  2. "feat(ui): botão de tema nos 3 layouts (admin, painel, público)"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks — esta task
+depende da task-6 (paleta/Tailwind) e da task-14 (layouts) já
+existirem.

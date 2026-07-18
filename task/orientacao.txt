@@ -1,0 +1,268 @@
+ORIENTAÇÃO GERAL - SaaS Celke Wash Club (lavagem automotiva)
+========================================================================
+
+Este arquivo é o ponto de partida para quem for executar as tasks deste
+diretório (task-1 até task-23). Antes de abrir a task-1, confira que
+todos os pré-requisitos abaixo estão prontos.
+
+Ao final da task-1 (Passo 5), este arquivo e todas as tasks são
+copiados pra dentro do próprio projeto Laravel (pasta task/) e
+versionados no repositório junto com o código — não ficam só na
+máquina de quem criou o projeto. Se você está lendo isso de dentro de
+lavagem-automotiva/task/, é exatamente esse o motivo de estar aqui.
+
+
+PRÉ-REQUISITOS
+-------------------
+
+1. Editor de código: VSCode (ou similar)
+   - É onde os arquivos do projeto serão editados.
+   - Precisa estar CONECTADO à sua conta do GitHub antes da task-1
+     (painel Source Control -> Sign in to GitHub, ou extensão "GitHub
+     Pull Requests and Issues", ou `gh auth login` no terminal) — sem
+     isso, o push do Git vai falhar mais adiante (ver task-1, Passo 0).
+
+2. Docker instalado no PC (+ Docker Compose)
+   - É a ÚNICA ferramenta de execução necessária além do editor —
+     PHP, Composer, Node, MySQL, Redis etc. rodam todos dentro de
+     containers (ver task-1). Não é preciso instalar mais nada disso
+     na máquina.
+   - Docker Desktop (Windows/Mac) já vem com Compose; no Linux,
+     confirme que o plugin docker-compose-plugin está instalado.
+
+3. Conta no GitHub + repositório já criado
+   - Criar um repositório novo no GitHub para este projeto (pode ser
+     privado) ANTES de começar a task-1.
+   - Ter em mãos o endereço do repositório (HTTPS ou SSH) — a task-1
+     pede exatamente esse endereço logo no início (Passo 0).
+
+4. Claude Code com plano Pro
+   - Para executar estas tasks com ajuda de IA, é necessário o plano
+     Pro do Claude.
+   - Modelo a ser usado aqui: Fable (Fable 5) — não Sonnet/Opus/Haiku.
+     Selecionar esse modelo antes de começar a executar as tasks
+     (comando /model no Claude Code, escolher Fable).
+
+
+COMO INICIAR A EXECUÇÃO (EXEMPLO DE PROMPT)
+--------------------------------------------------
+Depois de confirmar os 4 pré-requisitos acima (e já ter escolhido o
+modelo Fable via /model), o prompt inicial pro Claude Code — dentro da
+pasta saas-lavagem-automotiva/ — pode ser algo assim:
+
+  "Quero que você implemente o projeto Celke Wash Club seguindo as
+  orientações desta pasta. Leia primeiro o arquivo orientacao.txt
+  inteiro e depois a task-1-criar-projeto.txt. Comece a execução pelo
+  Passo 0 da task-1 — antes de rodar qualquer comando, me pergunte o
+  endereço do repositório GitHub que já criei pra este projeto.
+
+  Siga a ORDEM DE EXECUÇÃO DAS TASKS registrada na orientacao.txt, uma
+  task de cada vez, sem pular nenhuma. Dentro de cada task, siga a
+  seção 'COMMITS SUGERIDOS' e dê git push logo depois de cada commit
+  (nunca acumule commits sem enviar — ver as REGRAS OBRIGATÓRIAS DE
+  GIT). Antes de considerar uma task concluída, rode os testes
+  automatizados relevantes dela (ver task-13) e confirme que passam.
+
+  Se em algum momento precisar de uma decisão minha (ex: credenciais
+  de sandbox do PagSeguro, alguma ambiguidade que as tasks não
+  resolvem), pare e pergunte — não assuma e siga em frente."
+
+Por que pedir isso explicitamente, mesmo já estando tudo escrito nas
+tasks: a IA não abre este diretório sozinha nem lê os arquivos por
+padrão — precisa ser instruída a ler orientacao.txt e a task-1
+primeiro, e a seguir a ordem/regras à risca, porque sem essa instrução
+inicial ela pode tentar adivinhar uma ordem própria ou pular direto
+pra uma parte "mais interessante" do projeto.
+
+Pra sessões seguintes (depois que a primeira já tiver avançado várias
+tasks), ver a seção RETOMANDO O TRABALHO ENTRE SESSÕES mais abaixo —
+o prompt muda pra informar em qual task/commit a execução parou.
+
+
+ORDEM DE EXECUÇÃO DAS TASKS
+----------------------------------
+As tasks têm dependência entre si — seguir esta ordem evita retrabalho
+(mesma ordem já registrada no final da task-11):
+
+  task-1  -> criar o projeto Laravel 13 via Docker/Sail + Git
+  task-3  -> modelagem do banco de dados
+  task-6  -> identidade visual (paleta de cores)
+  task-14 -> layout do painel (dashboard, sidebar, componentes)
+  task-18 -> toggle dark/light mode
+  task-4  -> pagamentos (gateway dinâmico)
+  task-5  -> onboarding do lava-rápido
+  task-7  -> onboarding do assinante
+  task-16 -> programa de indicação (indique um amigo)
+  task-8  -> fluxo de resgate de lavagem
+  task-9  -> repasse financeiro aos lava-rápidos
+  task-15 -> cadastro de veículo do assinante (integra com task-8)
+  task-11 -> painel do admin
+  task-23 -> gerenciador de permissões (superadmin) + seed de usuários
+  task-10 -> módulo de estacionamento
+  task-19 -> sino de notificações no painel
+  task-21 -> webhook de reembolso e chargeback
+  task-22 -> gestão de usuários pelo admin (CRUD + visão 360°)
+  task-20 -> fidelidade e gamificação (pontos, conquistas, loja)
+  task-12 -> site institucional/marketing (Celke Wash Club)
+  task-17 -> ranking público "Lava-rápido do mês"
+
+  (task-2, visão de domínio, é só leitura/contexto — não tem código,
+  vale ler antes de tudo pra entender o modelo de negócio)
+
+  (task-13, testes automatizados, não é um passo isolado no final —
+  os testes de cada módulo devem ser escritos junto da task
+  correspondente; task-13 é a referência da estratégia + checklist de
+  cobertura, ver o próprio arquivo)
+
+NOTA SOBRE ESTA ORDEM (2026-07-17): a instalação do spatie/laravel-
+permission + Gate::before + seed completo de permissions/roles foi
+antecipada pra dentro da task-3 (seção 6), mesmo a task-11 sendo "o
+painel do admin" — porque rotas das tasks 4, 5 e 9 (todas antes da
+task-11 nesta ordem) já usam middleware permission:*, que quebraria se
+o pacote só existisse mais tarde. A task-14 (logo depois da task-6)
+também já assume esse pacote instalado pros @can da sidebar, mas suas
+ROTAS específicas (car-washes.index etc.) só nascem nas tasks 4/5/9/10/
+11 — por isso a sidebar usa Route::has() antes de cada item, pra não
+quebrar enquanto essas rotas ainda não existem (detalhe completo na
+própria task-14). Fora esse ponto, a ordem acima já reflete as
+dependências reais entre tasks.
+
+
+CONVENÇÃO DE IDIOMA
+-------------------------
+Regra explícita (já seguida implicitamente em todas as tasks deste
+projeto, mas nunca escrita — formalizando aqui pra não virar
+inconsistência conforme o projeto cresce):
+
+  - Código (variáveis, classes, métodos, nomes de tabela/coluna,
+    migrations): em INGLÊS. Já é a convenção usada em todo o schema da
+    task-3 (car_washes, wash_redemptions, payout_plans etc.) e nas
+    classes citadas nas demais tasks (PaymentGatewayFactory,
+    CarWashPanelMenu, BrazilianLicensePlate...).
+  - Comentários e documentação (docblocks, README, as próprias tasks):
+    em PORTUGUÊS (Brasil).
+  - Nomes de rota (URL paths visíveis ao usuário): em PORTUGUÊS — ex:
+    /parceiros/cadastro, /assinatura, /lavagem/escolher, /veiculos,
+    /painel/confirmar-lavagem. Nomes de rota INTERNOS do Laravel (a
+    string usada em route('nome.da.rota'), não a URL) seguem a
+    convenção do recurso em inglês já usada nas tasks (car-washes.index,
+    payouts.mark-paid).
+
+
+VERSÃO DO LARAVEL E CONSULTA À DOCUMENTAÇÃO
+--------------------------------------------------
+Regras obrigatórias, valem pra TODAS as tasks deste diretório:
+
+  1. Usar sempre a ÚLTIMA versão do Laravel disponível no momento da
+     task-1 (hoje, Laravel 13 — ver task-1-criar-projeto.txt). Este
+     projeto é independente do restante do ecossistema Celke (que usa
+     Laravel 12) — não copiar a versão dos outros projetos por hábito.
+     Se uma nova versão major do Laravel for lançada antes de a task-1
+     ser executada, usar a nova versão e atualizar esta observação.
+
+  2. Antes de implementar qualquer funcionalidade (rota, pacote,
+     comando Artisan, feature do framework), consultar a documentação
+     oficial (laravel.com/docs na versão correspondente, e a
+     documentação do pacote específico quando for algo de terceiros,
+     ex: Spatie, PagBank) em vez de confiar só em conhecimento prévio —
+     evita usar sintaxe/API descontinuada ou de versão anterior.
+
+
+COMO USAR CADA TASK
+--------------------------
+Cada arquivo task-N-*.txt já traz:
+  - objetivo e desenho da funcionalidade
+  - ajustes de schema (quando necessário)
+  - rotas/telas envolvidas
+  - seção "COMMITS SUGERIDOS PARA ESTA TASK" — seguir esses commits
+    pequenos em vez de um commit único gigante, pra acompanhar a
+    evolução do projeto pelo histórico do Git.
+
+REGRAS OBRIGATÓRIAS DE GIT (valem pra TODAS as tasks deste diretório):
+
+  1. Endereço do repositório GitHub: solicitado uma única vez, logo no
+     Passo 0 da task-1, ANTES de qualquer outro comando — ver o
+     próprio arquivo. Nenhuma task deste projeto assume um repositório
+     já configurado sem essa etapa ter acontecido primeiro.
+
+  2. Push a cada commit, não só no final da task: depois de CADA
+     commit da lista "COMMITS SUGERIDOS" de qualquer task (não só a
+     task-1), rodar `git push` imediatamente em seguida — nunca
+     acumular 2+ commits locais sem enviar. Isso vale mesmo que a
+     lista de commits sugeridos de uma task não repita "git push"
+     escrito em cada item (a partir da task-1 esse passo é implícito
+     em todo o restante do projeto, pra não poluir cada lista
+     repetindo a mesma instrução 5-10 vezes por task).
+
+  3. Confirmar que o teste/tela daquele commit específico funciona
+     ANTES de commitar (não só no fim da task inteira) — commitar
+     código quebrado só porque "a task ainda não terminou" quebra o
+     propósito de ter commits pequenos e rastreáveis.
+
+RETOMANDO O TRABALHO ENTRE SESSÕES
+----------------------------------------
+Este projeto (23 tasks, cada uma com várias migrations/controllers/
+views/testes) NÃO cabe numa sessão só de IA, mesmo em planos com janela
+maior — é o volume normal de um SaaS de produção completo. Bater no
+limite de uma sessão no meio de uma task não é um problema: o projeto
+foi desenhado de propósito pra isso (commits pequenos com push
+imediato, cada task autocontida, nada fica "pendurado" sem versionar —
+ver as REGRAS OBRIGATÓRIAS DE GIT acima).
+
+Descobrir onde parou é trabalho da PRÓPRIA IA, não seu — não precisa
+abrir o git log, comparar com a ordem de execução nem preencher nada
+antes de pedir. Numa sessão nova, o prompt pra retomar é sempre este,
+sem editar nada:
+
+  "Continue o projeto Celke Wash Club. Rode git log --oneline pra ver o
+  que já foi commitado, compare com a ORDEM DE EXECUÇÃO DAS TASKS da
+  orientacao.txt, identifique a task e o commit onde o trabalho parou,
+  e continue a partir dali — sem pular etapas e seguindo as mesmas
+  regras já documentadas (git push a cada commit, rodar os testes
+  antes de considerar um commit concluído, parar e perguntar se
+  encontrar ambiguidade)."
+
+Se em algum momento a IA não conseguir determinar o ponto exato só com
+o git log (ex: histórico confuso, commit fora do padrão), ela mesma
+deve rodar sail artisan migrate:status e conferir o código antes de
+escrever qualquer coisa nova — mais barato checar o estado real do que
+assumir e ter que desfazer depois.
+
+
+USUÁRIOS DE TESTE (SEED)
+------------------------------
+O db:seed deste projeto cria os usuários abaixo, cada um já com o
+papel/permissões correspondente (ver task-23 pra detalhe completo de
+como o seeder monta isso). Senha IGUAL pra todos, só pra ambiente de
+desenvolvimento/demonstração:
+
+  Senha (todos): 123456A#b
+
+  cesar@celke.com.br      -> superadmin (todas as permissions, inclusive
+                            o gerenciador de permissões — task-23)
+  kelly@celke.com.br      -> administrador (permissions operacionais do
+                            painel admin, exceto gerenciar
+                            roles/permissions — isso é exclusivo do
+                            superadmin)
+  jessica@celke.com.br    -> vinculada como owner de um car_wash de
+                            seed com o produto 'estacionamento' ativo
+                            (acessa o painel do lava-rápido, módulo de
+                            estacionamento)
+  gabrielly@celke.com.br  -> assinante comum, com uma subscription
+                            ativa de seed (pra já ter algo pra mostrar
+                            em demonstração sem precisar assinar na mão)
+
+ATENÇÃO: essa senha única e esses e-mails são SÓ pra sandbox/dev/
+gravação de vídeo — nunca usar esse seeder num ambiente de produção
+real. Ver task-23 para o seeder completo.
+
+
+AUTOR
+---------
+Desenvolvido por Cesar Szpak (https://celke.com.br) — Celke Cursos
+(https://github.com/celkecursos).
+
+
+LICENÇA
+-----------
+MIT — veja o arquivo LICENSE.txt para detalhes.

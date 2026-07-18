@@ -1,0 +1,216 @@
+TASK 7 - Autenticação e onboarding do assinante (cadastro, plano, pagamento)
+================================================================================
+
+OBJETIVO
+--------
+Permitir que o consumidor final se cadastre, escolha um plano do clube e
+pague a mensalidade, ativando a assinatura (subscriptions) e o primeiro
+ciclo de cota (subscription_cycles). Usa as tabelas da task-3 e o
+gateway dinâmico da task-4.
+
+
+1. CADASTRO (SELF-SERVICE)
+--------------------------------
+Tela pública "Criar conta" (/registro):
+  - nome, e-mail, senha (+ confirmação), telefone
+  - CPF (opcional na v1 — só obrigatório se decidir emitir nota fiscal
+    por CPF; não bloquear cadastro por causa disso agora)
+
+RegisterController@store:
+  1. Cria user (role = 'user' — não existe mais 'assinante' como valor
+     de role, ver revisão da task-3; a capacidade de assinante vem de
+     ter uma subscriptions, não do role).
+  2. Dispara verificação de e-mail (MustVerifyEmail, padrão Laravel).
+  3. Loga automaticamente.
+  4. Redireciona pra /planos (ainda sem assinatura ativa).
+
+Senha segue a mesma Password Policy já usada no restante do projeto
+(reaproveitar desde o cadastro, não deixar regra fraca "por enquanto" —
+mesmo cuidado já registrado na task-5).
+
+
+2. VITRINE DE PLANOS
+--------------------------
+Tela pública /planos, lista plans onde active = true:
+  - nome, preço (formatado a partir de price_cents), cota de lavagens
+    (wash_quota + quota_period), badge "seu plano atual" se o usuário
+    logado já tiver uma subscriptions com status='active' desse plano
+    (usar o mapeamento de cor da task-6: active -> success).
+  - lista de plan_features ativos do plano (ordenada por sort_order) —
+    vantagens de marketing gerenciadas pelo admin, ver task-11.
+
+Se o usuário não estiver logado e clicar "Assinar": redireciona pro
+login/registro e volta pro checkout do plano escolhido depois (mesmo
+padrão de redirect seguro descrito na experiência do Celke Payments —
+válido só pra path interno, nunca aceitar URL externa arbitrária).
+
+
+3. CHECKOUT
+----------------
+GET /planos/{plan}/checkout (CheckoutController@create): mostra a
+tela com o formulário de cartão (nome/número/validade/CVV) — detalhe
+completo da página, script do SDK e como o cartão é tokenizado no
+browser antes de qualquer request nossa: task-4, seção 5.3.
+
+POST /planos/{plan}/assinar (CheckoutController@store) — chamado pelo
+JS da tela acima já com o cartão criptografado, nunca com dado de
+cartão em texto puro:
+  1. Valida que o usuário não tem já uma subscriptions ativa (v1: 1
+     assinatura ativa por vez; trocar de plano é fluxo separado, ver
+     seção 5).
+  2. Cria subscriptions com status='incomplete' (renomeado de
+     'trialing' — não existe período de teste gratuito no produto,
+     ver task-3; 'incomplete' = criada mas aguardando confirmação do
+     primeiro pagamento). Só vira 'active' e só popula
+     current_period_start/end quando o webhook confirmar 'paid'.
+  3. Cria orders (payable_type=Subscription, payable_id=subscription.id,
+     user_id, amount_cents=plan.price_cents).
+  4. PaymentGatewayFactory::resolveActiveGateway() grava o
+     payment_gateway_id no order já na criação (pending) — mesmo
+     cuidado já registrado na task-4 (não deixar null até o markPaid).
+     SE resolveActiveGateway() retornar null (nenhum gateway ativo
+     configurado), NÃO criar o order/subscription — mostrar direto uma
+     tela de erro amigável ("pagamentos indisponíveis no momento, tente
+     novamente mais tarde") e registrar Log::error, sem deixar o
+     assinante com uma subscription 'incomplete' órfã no banco.
+  5. PaymentGatewayFactory::make()->createCheckout($order) monta a tela.
+     Pra assinatura (payable_type=Subscription), o order nasce com
+     recurring_type='initial' — o checkout_mode do gateway escolhido
+     PRECISA ser 'embedded' nesse caso (tokeniza o cartão no browser
+     via SDK JS do provedor e pede store=true pra reutilizar depois);
+     'redirect' não serve aqui porque não gera um cartão salvo
+     reutilizável — ver task-4, seção 5.1, sobre a integração real com
+     o PagSeguro. Envolver a chamada num try/catch de
+     PaymentGatewayNotConfiguredException pela mesma razão do passo 4
+     (defesa em profundidade — a checagem do passo 4 já deveria ter
+     pego isso, mas se o gateway for desativado bem no meio do
+     checkout, esse catch evita erro 500 pro usuário).
+
+Webhook (PaymentWebhookController, já descrito na task-4) ao confirmar
+'paid':
+  1. order.status = 'paid', paid_at = now().
+  2. Ativa a subscription: status='active', current_period_start=now(),
+     current_period_end = now()->add(quota_period do plano).
+  3. Cria o primeiro subscription_cycles: period_start/end iguais ao da
+     subscription, quota_total = plan.wash_quota (copiado, não
+     referenciado — já documentado na task-3 o motivo), quota_used=0.
+
+
+4. RENOVAÇÃO (CICLO RECORRENTE, COBRANÇA VIA CARTÃO SALVO)
+------------------------------------------------------------------
+Diferente do 1º pagamento (checkout visível, embedded), a renovação é
+100% automática — o assinante não vê nada, não precisa fazer nada.
+Comando artisan subscriptions:renew (scheduler diário, mesmo cuidado já
+registrado noutro lugar do projeto: precisa ser schedule:work rodando
+de verdade, não só o comando existir — conferir composer run dev/
+supervisor de produção):
+
+  1. Busca subscriptions com status='active' e
+     current_period_end <= hoje.
+  2. Pra cada uma, busca o payment_method_tokens do usuário PRO
+     gateway atualmente ativo (PaymentGatewayFactory::
+     resolveActiveGateway()).
+     - Sem token pro gateway ativo (ex: o gateway ativo mudou desde a
+       assinatura inicial e o token salvo era de outro gateway):
+       trata direto como falha de renovação (pula pro passo 4), sem
+       nem tentar cobrar — não dá pra cobrar cartão salvo em gateway
+       diferente do que gerou o token.
+  3. Cria um novo order (recurring_type='subsequent', nunca reaproveita
+     um order antigo — mesmo princípio já usado no Celke Payments:
+     cada cobrança é um pedido novo, mantém histórico limpo) e chama
+     $gateway->chargeSavedMethod($order, $token) diretamente — SEM
+     checkout, é uma chamada servidor-a-servidor.
+  4. ChargeResult 'paid': order.status='paid',
+     subscriptions.current_period_end avança, e cria novo
+     subscription_cycles (period_start = fim do ciclo anterior,
+     quota_used=0, quota_total = plan.wash_quota atual — se
+     rollover_quota do plano for true, somar o saldo não usado do
+     ciclo anterior; ver task-3 seção 3 sobre esse campo).
+  5. ChargeResult 'failed' (ou sem token, passo 2): subscriptions.
+     status='past_due'. Concede uma carência simples de calendário
+     (ex: 3 dias corridos — não precisa da sofisticação de dias úteis/
+     feriados usada no Celke, aqui é só uma tolerância curta pra falha
+     de cartão) antes de: subscriptions.status='canceled' se não
+     regularizar (o comando subscriptions:renew tenta cobrar de novo
+     todo dia dentro da carência, com o mesmo token salvo).
+
+Chargeback/estorno reportado depois via webhook segue o mesmo
+tratamento que orders avulsos já têm (task-4).
+
+
+5. CANCELAMENTO E TROCA DE PLANO
+--------------------------------------
+Cancelamento (assinante, self-service, /assinatura/cancelar):
+  - subscriptions.status = 'canceled', canceled_at = now().
+  - Acesso continua até current_period_end (o período já pago não é
+    interrompido) — só a renovação futura não acontece.
+  - Diferente de reembolso/chargeback (task-21), que revoga o acesso
+    IMEDIATAMENTE porque o dinheiro voltou — este cancelamento aqui é
+    voluntário, o pagamento já feito não é devolvido.
+
+Troca de plano (upgrade/downgrade): v1 simples, sem proporcionalidade —
+a troca só entra em vigor na PRÓXIMA renovação (evita lógica de
+prorate/crédito parcial na v1). Usuário marca "trocar para X no
+próximo ciclo"; guardar isso num campo subscriptions.pending_plan_id
+(nullable) e o job de renovação usa esse plano em vez do atual, se
+preenchido.
+
+  AJUSTE NO SCHEMA DA TASK-3:
+    subscriptions
+      ...
+      pending_plan_id   (FK -> plans, nullable — trocado no próximo
+                        ciclo de renovação)
+
+
+6. PAINEL DO ASSINANTE
+----------------------------
+/assinatura (dashboard):
+  - plano atual, status (badge conforme task-6), cota do ciclo
+    (quota_used / quota_total), data de renovação
+  - histórico de lavagens resgatadas (liga com task-8)
+  - histórico de pedidos/pagamentos (orders)
+  - botão cancelar / trocar de plano
+
+
+7. NOTIFICAÇÕES (E-MAIL)
+------------------------------
+  - Verificação de e-mail
+  - Assinatura confirmada (após primeiro pagamento)
+  - Renovação confirmada
+  - Falha na renovação (past_due — avisa antes de cancelar)
+  - Assinatura cancelada
+  - Troca de plano agendada pro próximo ciclo
+
+
+8. ROTAS (RESUMO)
+-----------------------
+Público:
+  GET  /registro / POST /registro
+  GET  /planos
+
+Assinante (auth):
+  GET  /planos/{plan}/checkout   (tela do formulário de cartão —
+                                 embedded, ver task-4 seção 5.3)
+  POST /planos/{plan}/assinar
+  GET  /assinatura
+  POST /assinatura/cancelar
+  POST /assinatura/trocar-plano
+
+Webhook: já coberto na task-4 (POST /webhooks/{gatewayTypeSlug}).
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(subscriber): migration pending_plan_id em subscriptions"
+  2. "feat(subscriber): cadastro self-service do assinante"
+  3. "feat(subscriber): vitrine de planos e checkout"
+     (integra com PaymentGatewayFactory da task-4)
+  4. "feat(subscriber): ativação de assinatura e primeiro ciclo via webhook"
+  5. "feat(subscriber): comando subscriptions:renew com cartão salvo (chargeSavedMethod)"
+  6. "feat(subscriber): troca de plano agendada pro próximo ciclo"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

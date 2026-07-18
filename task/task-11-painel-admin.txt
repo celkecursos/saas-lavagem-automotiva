@@ -1,0 +1,161 @@
+TASK 11 - Painel do admin
+================================
+
+OBJETIVO
+--------
+Consolidar num único painel administrativo tudo que já foi descrito nas
+tasks anteriores (fila de aprovação de lava-rápidos, gateways de
+pagamento, repasses), mais o que ainda não tinha tela própria (planos,
+assinantes, pedidos, auditoria), e decidir o controle de acesso entre
+os próprios admins.
+
+
+1. PERMISSÕES ENTRE ADMINS (DECISÃO DE ARQUITETURA)
+----------------------------------------------------------
+A task-3 define users.role como um campo macro que só distingue staff
+da plataforma ('admin') do resto ('user') — deixando explícito que
+permissões finas ficariam pra depois "se necessário". Chegou a hora: o
+painel admin reúne ações bem diferentes (aprovar lava-rápido, mexer em
+gateway de pagamento, marcar repasse como pago, editar preço de plano)
+que faz sentido times diferentes terem ou não acesso (ex: suporte
+aprova cadastro mas não deveria poder trocar o gateway de pagamento
+ativo) — e isso não tem nada a ver com o role='user'/'admin' em si, que
+só decide QUEM pode logar no painel, não O QUE cada admin pode fazer
+dentro dele.
+
+Decisão: usar spatie/laravel-permission (mesmo pacote usado no projeto
+adm do mesmo ecossistema, atrás de permission:* em todas as rotas de
+staff — reaproveitar o padrão conhecido em vez de inventar um novo
+mecanismo). O pacote em si, o `Gate::before` do Super Admin e o seed
+completo de permissions/roles já foram antecipados pra task-3, seção 6
+— ROTAS ADMIN de tasks anteriores a esta (4, 5, 9) já dependiam disso,
+então a fundação precisava existir antes, não só aqui. Esta task só
+CONSOME o que já existe (rotas com `permission:...`) e monta as telas
+que ainda faltavam.
+
+A TELA de gerenciar papéis/permissions dinamicamente (superadmin
+atribuindo permission a um papel sem precisar de deploy) é a task-23,
+que também traz o seeder completo dos usuários de teste do projeto.
+
+Continua existindo users.role = 'admin' como o macro-papel (quem pode
+logar no painel); as permissions do Spatie decidem O QUE cada admin
+pode fazer dentro do painel. Um admin sem nenhuma permission ainda
+consegue logar, só não vê nada de ação (mesmo padrão de "role de acesso
++ permission granular" já validado no adm).
+
+
+2. DASHBOARD (VISÃO GERAL)
+---------------------------------
+Tela inicial do painel (/admin), KPIs simples (queries diretas, sem
+necessidade de tabela de cache/agregação na v1):
+  - Assinantes ativos (subscriptions.status='active')
+  - MRR aproximado (soma de plans.price_cents dos assinantes ativos)
+  - Lava-rápidos aprovados / pendentes (contagem por status)
+  - Lavagens confirmadas no mês (wash_redemptions.status='completed')
+  - Repasses pendentes de pagamento (payouts.status='pending', valor
+    total)
+
+
+3. TELAS JÁ DESCRITAS EM TASKS ANTERIORES (só referência, sem repetir
+   aqui o desenho completo)
+------------------------------------------------------------------------
+  - car-washes.index/show + approve/reject/suspend        -> task-5
+  - car-wash-product-subscriptions.index/show + approve/reject
+                                                            -> task-5/9
+  - payout-plans.index/create/edit (catálogo de repasse)  -> task-9
+  - payment-gateways.index/create/edit + activate          -> task-4
+  - payouts.index/show + mark-paid/mark-failed              -> task-9
+  - cancellation-requests.index/show + approve/reject      -> task-8/9/10
+  - parking-billing-settings.edit (% e antifraude)          -> task-10
+  - parking-billing-charges.index/show (fila sinalizada)    -> task-10
+  - order-refund-requests.index (fila manual) + refund-settings.edit
+                                                             -> task-21
+  - users.index/show + suspend/reactivate (visão 360° da pessoa)
+                                                             -> task-22
+
+
+4. TELAS NOVAS DESTA TASK
+--------------------------------
+
+payment-plans.* (CRUD de plans):
+  - listar/criar/editar planos (name, price_cents, wash_quota,
+    quota_period, rollover_quota, max_redemptions_per_day_per_car_wash,
+    active).
+  - Auditable (já previsto na task-3: mudança de preço/cota de um plano
+    já em uso por assinantes ativos é sensível).
+  - Aviso na UI ao editar um plano com assinantes ativos: mudança só
+    afeta o PRÓXIMO ciclo de quem já assinou (subscription_cycles
+    congela quota_total no momento do ciclo — já garantido pelo
+    schema, só reforçar na mensagem da tela pra não gerar dúvida de
+    suporte).
+  - Gerenciamento de plan_features (vantagens de marketing) DENTRO da
+    própria tela payment-plans.edit — não é uma tela separada. Lista
+    reordenável (sort_order) de textos livres (ex: "Suporte
+    prioritário", "Desconto em produtos parceiros"), com toggle
+    active/inativo por item, sem precisar apagar histórico. Puramente
+    descritivo — NÃO é Auditable (não afeta nenhuma regra de negócio,
+    diferente dos campos funcionais do plano).
+
+subscriptions.index/show (lista de assinaturas, visão rápida por
+plano/status — complementar à visão 360° de usuário da task-22):
+  - Lista com filtro por status, plano.
+  - Detalhe: histórico de ciclos, pedidos (orders), lavagens resgatadas
+    DESSA assinatura específica (pra ver o histórico completo da
+    PESSOA, incluindo veículos/indicações/fidelidade/vínculo com
+    lava-rápido, ver users.show na task-22).
+  - Sem ação de edição direta aqui — mudanças de assinatura passam pelos
+    fluxos próprios (task-7) ou pelo suporte via ação específica
+    (ex: cancelar em nome do usuário, se necessário — CRIAR só se
+    surgir demanda real de suporte, não construir de antemão).
+
+orders.index/show:
+  - Auditoria/suporte de pagamentos — mesmo padrão já usado no Celke
+    Payments (order-managers). Ação de reembolso ("Reembolsar") agora
+    coberta na task-21 (RefundService + fila de reembolso manual +
+    tratamento de chargeback via webhook).
+
+audits.index:
+  - Tela de consulta do log gerado pelo owen-it/laravel-auditing (task-3,
+    seção 5). Filtro por model — lista completa dos Auditable definidos
+    na task-3: users, car_washes, car_wash_product_subscriptions, plans,
+    subscriptions, wash_redemptions, payouts, payout_items, payout_plans,
+    cancellation_requests, payment_gateways, orders, parking_rates,
+    parking_sessions, parking_billing_settings, parking_billing_charges,
+    loyalty_redemptions, order_refund_requests, refund_settings
+    (lista atualizada conforme tasks 20/21/22 acrescentaram novos
+    Auditable — conferir a task-3 seção 5 se essa lista divergir no
+    futuro, ela é a fonte da verdade) — por usuário responsável, por
+    período. Só leitura — é o log de "quem fez o quê".
+
+
+5. ROTAS (RESUMO — NOVAS DESTA TASK)
+-----------------------------------------
+  GET  /admin                                (dashboard)
+  GET  /admin/payment-plans
+  POST /admin/payment-plans
+  GET  /admin/payment-plans/{plan}/edit
+  PUT  /admin/payment-plans/{plan}
+  GET  /admin/subscriptions
+  GET  /admin/subscriptions/{subscription}
+  GET  /admin/orders
+  GET  /admin/orders/{order}
+  GET  /admin/audits
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(admin): dashboard com KPIs"
+  2. "feat(admin): CRUD de planos"
+  3. "feat(admin): gerenciamento de vantagens (plan_features) por plano"
+  4. "feat(admin): CRUD de payout_plans (catálogo de repasse)"
+  5. "feat(admin): telas de assinantes e pedidos"
+  6. "feat(admin): tela de consulta de auditoria"
+
+
+PRÓXIMOS PASSOS
+--------------------
+- task-12: site institucional/marketing (Celke Wash Club)
+- task-13: testes automatizados (Pest/PHPUnit)
+
+Ver orientacao.txt para a ordem de execução completa e o índice de
+todas as tasks do projeto.

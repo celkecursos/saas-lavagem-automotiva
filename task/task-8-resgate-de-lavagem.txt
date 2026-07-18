@@ -1,0 +1,178 @@
+TASK 8 - Fluxo de resgate de lavagem
+========================================
+
+OBJETIVO
+--------
+O assinante escolhe um lava-rápido afiliado e ativo, gera um código de
+confirmação, e um funcionário daquele lava-rápido confirma o atendimento
+no local — só então a cota é debitada. Evita descontar cota por engano
+(código gerado e nunca usado) e evita fraude (confirmação exige alguém
+fisicamente no lava-rápido).
+
+
+1. AJUSTE NO SCHEMA DA TASK-3
+-----------------------------------
+wash_redemptions precisa de mais campos do que os previstos originalmente
+(a v1 do schema só tinha status 'completed'/'canceled', sem etapa
+intermediária):
+
+  wash_redemptions
+    id
+    subscription_cycle_id
+    car_wash_id
+    redeemed_at              (nullable agora — só preenchido quando
+                              CONFIRMADO, não na criação)
+    confirmation_code         char(6) — gerado na criação
+    code_expires_at
+    confirmed_by_user_id      (FK -> users, nullable — o funcionário do
+                              lava-rápido que confirmou)
+    status                    enum: 'requested', 'completed', 'expired',
+                              'canceled'
+    payout_item_id            (FK -> payout_items, nullable)
+    created_at / updated_at
+
+(campo vehicle_id acrescentado depois, pela task-15 — ver task-3 pra a
+versão atual completa da tabela)
+
+Atualizar também o mapeamento de cores da task-6:
+  wash_redemptions.status
+    requested  -> info (ciano)
+    completed  -> success
+    expired    -> secondary (cinza)
+    canceled   -> danger
+
+
+2. FLUXO PASSO A PASSO
+----------------------------
+
+Passo 0 — Assinante escolhe o veículo (task-15): se tiver só 1 veículo
+ativo cadastrado, pula direto; se tiver mais de 1, escolhe qual vai ser
+lavado; se não tiver nenhum, é redirecionado pra cadastrar antes de
+continuar.
+
+Passo 1 — Assinante escolhe o lava-rápido (/lavagem/escolher):
+  - Lista car_washes com status='approved' E
+    car_wash_product_subscriptions (product='clube_lavagem',
+    status='active').
+  - Ordenar por proximidade se latitude/longitude do assinante estiver
+    disponível (geolocalização do browser, opcional — não bloquear o
+    fluxo se o usuário negar permissão).
+
+Passo 2 — Validações antes de gerar o código
+  (WashRedemptionService::request()):
+  - subscriptions.status = 'active'.
+  - subscription_cycles atual: quota_used < quota_total.
+  - Se plans.max_redemptions_per_day_per_car_wash estiver preenchido:
+    contar wash_redemptions status='completed' desse assinante NESSE
+    lava-rápido HOJE e bloquear se já atingiu o limite.
+  - Não pode ter outro wash_redemption em status='requested' ainda
+    válido (código não expirado) — evita gerar vários códigos ao mesmo
+    tempo.
+
+Passo 3 — Gerar o código
+  - Cria wash_redemptions (status='requested', vehicle_id=escolhido no
+    Passo 0, confirmation_code = 6 dígitos aleatórios,
+    code_expires_at = now()->addMinutes(15)).
+  - Tela mostra o código grande (e/ou QR code) pro assinante mostrar no
+    balcão do lava-rápido.
+  - NÃO debita quota_used ainda.
+
+Passo 4 — Funcionário confirma no local
+  (/painel/confirmar-lavagem, tela do lava-rápido — car_wash_users):
+  - Funcionário digita o confirmation_code; a tela mostra placa +
+    marca/modelo/cor do veículo (task-15) junto do código, pra
+    conferência visual antes de confirmar.
+  - Sistema busca wash_redemptions com esse código, car_wash_id = do
+    lava-rápido do funcionário logado (nunca aceitar código de outro
+    lava-rápido), status='requested', code_expires_at > now().
+  - Confirma: status='completed', redeemed_at=now(),
+    confirmed_by_user_id = funcionário logado.
+  - SÓ AGORA incrementa subscription_cycles.quota_used em 1.
+
+Passo 5 — Expiração
+  - Job agendado (a cada minuto, junto do scheduler já existente)
+    marca status='expired' todo wash_redemptions 'requested' com
+    code_expires_at < now(). Nenhuma cota foi debitada, nada a
+    devolver.
+
+Passo 6 — Cancelamento pelo próprio assinante
+  - Enquanto status='requested' e ainda não confirmado, o assinante
+    pode cancelar (ex: desistiu, foi pra outro lava-rápido) ->
+    status='canceled'.
+
+Passo 7 — Avaliação (depois de 'completed')
+  - Assim que a lavagem é confirmada, o assinante é convidado a avaliar
+    o lava-rápido (nota 0-100, comentário opcional) — cria
+    car_wash_ratings (wash_redemption_id, car_wash_id, user_id, score).
+    Não é bloqueante (o assinante pode pular), mas é incentivado na
+    própria tela de confirmação.
+  - Ao salvar, recalcula car_washes.satisfaction_score (média de todas
+    as car_wash_ratings daquele car_wash) — esse valor decide o
+    percentual de repasse ao lava-rápido, ver task-9.
+
+Passo 8 — Solicitação de cancelamento de lavagem JÁ confirmada
+  - Depois de 'completed', nem o assinante nem o funcionário do
+    lava-rápido podem simplesmente desfazer sozinhos (evita fraude e
+    erro silencioso que afetaria o repasse). Qualquer um dos dois pode
+    abrir uma cancellation_request (requestable_type=WashRedemption,
+    reason obrigatório) — ex: funcionário confirmou o código da pessoa
+    errada, ou o assinante alega que o serviço não foi realizado.
+  - Fica em status='pending' até o ADMIN decidir (aprovar ou rejeitar —
+    ver task-9/task-11). Nenhuma mudança acontece na wash_redemption
+    até a decisão do admin.
+
+
+3. PAINEL DO ASSINANTE
+----------------------------
+  - Histórico de lavagens (wash_redemptions do usuário, com status e
+    badge de cor conforme task-6).
+  - Código ativo em destaque enquanto status='requested' e não expirado
+    (contador regressivo até code_expires_at).
+
+
+4. PAINEL DO LAVA-RÁPIDO
+------------------------------
+  - Tela "Confirmar lavagem" (input do código + botão confirmar).
+  - Histórico de lavagens confirmadas naquele lava-rápido (para
+    conferência antes do repasse — liga com task-9).
+
+
+5. NOTIFICAÇÕES
+--------------------
+  - Lavagem confirmada (e-mail/notificação simples pro assinante,
+    confirmando que a cota foi debitada).
+  - Não é necessário notificar expiração/cancelamento por e-mail — é
+    visível na hora na própria tela.
+
+
+6. ROTAS (RESUMO)
+-----------------------
+Assinante (auth):
+  GET  /lavagem/escolher
+  POST /lavagem/{carWash}/resgatar        (gera o código)
+  POST /lavagem/{washRedemption}/cancelar
+  POST /lavagem/{washRedemption}/avaliar             (nota + comentário)
+  POST /lavagem/{washRedemption}/solicitar-cancelamento  (já confirmada)
+
+Lava-rápido (auth, car_wash_users):
+  GET  /painel/confirmar-lavagem
+  POST /painel/confirmar-lavagem           (recebe o código)
+  GET  /painel/lavagens                    (histórico)
+  POST /painel/lavagens/{washRedemption}/solicitar-cancelamento
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(wash): migrations de código de confirmação em wash_redemptions"
+  2. "feat(wash): geração de código de resgate pelo assinante"
+  3. "feat(wash): confirmação do código pelo lava-rápido"
+  4. "feat(wash): expiração automática de códigos (scheduler)"
+  5. "feat(wash): painel do assinante e do lava-rápido (histórico)"
+  6. "feat(wash): avaliação pós-lavagem (car_wash_ratings + satisfaction_score)"
+  7. "feat(wash): solicitação de cancelamento de lavagem já confirmada"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

@@ -1,0 +1,241 @@
+TASK 5 - Autenticação e onboarding do lava-rápido (self-service)
+========================================================================
+
+OBJETIVO
+--------
+Permitir que um lava-rápido se cadastre sozinho na plataforma, sem
+intervenção manual do admin no cadastro em si — mas fique com status
+"pendente" até um admin aprovar antes de aparecer para os assinantes ou
+poder contratar qualquer um dos dois produtos (clube de lavagem /
+estacionamento).
+
+Usa as tabelas já definidas na task-3: users, car_washes, car_wash_users,
+car_wash_product_subscriptions.
+
+
+1. AJUSTE NO SCHEMA DA TASK-3
+-----------------------------------
+Faltou um campo pra guardar o motivo quando o admin rejeita um cadastro.
+Adicionar em car_washes:
+
+  car_washes
+    ...
+    rejection_reason        text, nullable
+                            (preenchido só quando status = 'rejected';
+                            mostrado pro dono do lava-rápido)
+
+
+2. FLUXO DE CADASTRO (SELF-SERVICE)
+-----------------------------------------
+
+Tela pública "Cadastre seu lava-rápido" (/parceiros/cadastro), em 1 form:
+
+  Dados do responsável (vira o registro em users + owner em
+  car_wash_users):
+    - nome
+    - e-mail
+    - senha (+ confirmação)
+    - telefone
+
+  Dados do estabelecimento (vira o registro em car_washes):
+    - nome do lava-rápido
+    - CNPJ (ou CPF, se MEI/autônomo) — document, unique
+    - telefone do estabelecimento
+    - e-mail do estabelecimento (pode ser igual ao do responsável)
+    - endereço completo (address_line, city, state, zip_code)
+
+Ao submeter (RegisterCarWashController@store, numa transação DB):
+  1. Cria o user (role = 'user' — não existe mais 'lavacar' como valor
+     de role, ver revisão da task-3; a capacidade de gerenciar este
+     lava-rápido vem do vínculo criado no passo 3, não do role).
+  2. Cria o car_wash (status = 'pending').
+  3. Cria o vínculo em car_wash_users (role = 'owner').
+  4. Dispara e-mail de verificação de e-mail (Laravel padrão,
+     MustVerifyEmail no model User).
+  5. Loga o usuário automaticamente (já pode acessar o painel do
+     lava-rápido, mas em modo "aguardando aprovação").
+
+Validações:
+  - email (users) e document/email (car_washes) únicos — mensagens
+    claras se já existe cadastro com esse CNPJ ou e-mail.
+  - senha segue a Password Policy do projeto (mesma regra descrita nas
+    memórias do ecossistema Celke: política forte + recusa de senha
+    vazada — reaproveitar aqui desde o início, não deixar fraca "por
+    enquanto").
+
+Regra importante: o car_wash só ENTRA na fila de aprovação do admin
+depois que o e-mail do responsável for verificado. Enquanto não verificar,
+o status fica 'pending' mas a listagem do admin pode filtrar/ordenar por
+"e-mail verificado" pra não gastar tempo revisando cadastro que pode nem
+ser de um e-mail real. (Não é um status novo — é só um filtro/ordenação
+na fila, baseado em users.email_verified_at do owner.)
+
+
+3. PAINEL DO LAVA-RÁPIDO ENQUANTO PENDENTE
+------------------------------------------------
+Depois de logado, o dono vê um painel simplificado com:
+  - Status atual do cadastro (pendente / aprovado / rejeitado / suspenso)
+  - Se rejeitado: o rejection_reason, com opção de corrigir os dados e
+    reenviar (volta pra status = 'pending')
+  - Enquanto 'pending' ou 'rejected': NENHUMA ação de contratar produto
+    (clube de lavagem / estacionamento) fica disponível — só depois de
+    'approved'.
+
+
+4. FILA DE APROVAÇÃO DO ADMIN
+------------------------------------
+Tela admin car-washes.index, com filtro por status (padrão: mostrar
+'pending' com e-mail verificado primeiro).
+
+Ações (car-washes.approve / .reject / .suspend — cada uma sua própria
+rota/ação, não efeito colateral de um update genérico):
+  - approve: status -> 'approved', approved_at = now(), approved_by =
+    admin atual. Dispara e-mail "cadastro aprovado" pro dono.
+  - reject: exige rejection_reason (obrigatório), status -> 'rejected'.
+    Dispara e-mail com o motivo.
+  - suspend: para lava-rápido já aprovado que precisa ser tirado do ar
+    (ex: reclamações). status -> 'suspended'. Isso não apaga
+    car_wash_product_subscriptions, só impede o lava-rápido de aparecer
+    pros assinantes / operar enquanto suspenso (checar status = approved
+    em toda query pública, não só no momento do cadastro).
+
+Todas as 3 ações são Auditable (já definido na task-3, seção 5) — quem
+aprovou/rejeitou/suspendeu e quando fica registrado em audits.
+
+
+5. ATIVAÇÃO DE PRODUTOS (PÓS-APROVAÇÃO)
+-----------------------------------------------
+Só depois de car_washes.status = 'approved', o painel do lava-rápido
+libera a tela "Meus produtos" com 2 cards: "Clube de lavagem" e
+"Gerenciador de estacionamento". Os dois produtos são independentes
+entre si — ativar um não exige nem implica o outro. MAS o fluxo de
+ativação de cada um é diferente (revisão 2026-07-16, corrigindo uma
+contradição da v1 deste documento):
+
+Estacionamento — 100% self-service, sem aprovação extra:
+  - dono clica "Ativar" -> cria/atualiza car_wash_product_subscriptions
+    (product='estacionamento', status='active', activated_at=now()).
+  - dono pode "Pausar" -> status='suspended', por iniciativa própria.
+
+Clube de lavagem — self-service pra ESCOLHER, mas precisa de aprovação
+do admin pra ATIVAR (porque envolve dinheiro repassado pela plataforma,
+diferente do estacionamento):
+  1. Dono acessa "Ativar clube de lavagem" e escolhe um payout_plan do
+     catálogo mantido pelo admin (ex: "Essencial Nível 1 — R$ 20,00 por
+     lavagem", "Turbo Nível 2 — R$ 50,00 por lavagem" — ver task-3,
+     seção 3, e task-9 sobre como o valor final do repasse é calculado
+     a partir disso). Não existe campo de valor livre — só escolha
+     entre as opções ativas do catálogo.
+  2. Isso cria car_wash_product_subscriptions (product='clube_lavagem',
+     status='pending', payout_plan_id preenchido).
+  3. Cai numa fila de aprovação do admin (car-wash-product-
+     subscriptions.index, ver task-9/task-11) — o admin confere e
+     aprova (status='active', activated_at=now(), approved_by=admin
+     atual) ou rejeita.
+  4. Só depois de status='active' o lava-rápido aparece nas buscas do
+     assinante (task-8) e pode receber resgates de lavagem.
+  Essa ação de aprovação é Auditable (mesmo critério da task-3).
+
+  O dono pode trocar de payout_plan depois (nova seleção -> volta pra
+  'pending' até o admin aprovar de novo) ou "Pausar" por iniciativa
+  própria (status='suspended', sem precisar de aprovação pra pausar,
+  só pra ativar/reativar).
+
+
+6. CONVITE DE FUNCIONÁRIOS (car_wash_users)
+--------------------------------------------------
+O dono (role = 'owner' em car_wash_users) pode convidar outras pessoas
+pra ajudar a operar o lava-rápido (ex: atendente que resgata lavagens,
+ou opera o estacionamento):
+  - tela "Equipe" no painel do lava-rápido -> convidar por e-mail.
+  - se o e-mail já é de um user existente (inclusive alguém que já é
+    assinante do clube — isso é permitido e esperado, ver observação da
+    task-3 sobre role): vincula direto (role='employee' em
+    car_wash_users) e notifica.
+  - se não existe: cria um convite pendente em car_wash_invitations
+    (tabela definida na task-3) — ao aceitar, cria o user (role='user',
+    já sem distinção de 'lavacar' desde a revisão da task-3) e o
+    vínculo em car_wash_users.
+
+
+7. CONTEXTO: USUÁRIO VINCULADO A MAIS DE UM LAVA-RÁPIDO
+--------------------------------------------------------------
+car_wash_users é N:N — nada impede a mesma pessoa ser owner/employee de
+mais de um car_wash (ex: dono de uma pequena rede, ou funcionário que
+também ajuda em outra unidade). Todas as rotas /painel/* deste projeto
+operam sobre UM lava-rápido de cada vez, então:
+
+  - Se o usuário logado tem só 1 car_wash vinculado: nada muda, o
+    painel já assume esse automaticamente (comportamento da v1).
+  - Se tem mais de 1: a sessão guarda qual é o "lava-rápido atual"
+    (current_car_wash_id na sessão, não no banco) e um seletor aparece
+    no topo do painel (dropdown com os car_washes vinculados) pra
+    trocar o contexto. Toda rota /painel/* passa a operar sobre esse
+    car_wash da sessão, com um middleware (ex: SetCurrentCarWash) que
+    resolve e valida que o usuário realmente tem acesso àquele
+    car_wash_id antes de qualquer ação.
+
+
+8. NOTIFICAÇÕES (E-MAIL)
+------------------------------
+  - Verificação de e-mail (padrão Laravel)
+  - Cadastro recebido / aguardando aprovação (confirmação após o submit)
+  - Cadastro aprovado
+  - Cadastro rejeitado (com o motivo)
+  - Cadastro suspenso
+  - Convite de equipe recebido / aceito
+  - Ativação do clube de lavagem aprovada/rejeitada pelo admin
+
+
+9. ROTAS (RESUMO)
+-----------------------
+Público:
+  GET  /parceiros/cadastro           (form)
+  POST /parceiros/cadastro           (store)
+
+Painel do lava-rápido (auth, precisa de car_wash_users vinculado —
+ver seção 7 sobre o middleware que resolve o car_wash atual):
+  GET  /painel                        (status do cadastro / dashboard)
+  GET  /painel/produtos               (ativar/pausar produtos)
+  POST /painel/produtos/estacionamento/ativar
+  POST /painel/produtos/estacionamento/pausar
+  POST /painel/produtos/clube-lavagem/solicitar   (escolhe payout_plan,
+                                                   fica 'pending')
+  POST /painel/produtos/clube-lavagem/pausar
+  GET  /painel/equipe                 (listar/convidar)
+  POST /painel/equipe/convidar
+  GET  /convites/{token}              (aceitar convite)
+
+Admin:
+  GET  /admin/car-washes                    (fila, filtros por status)
+  GET  /admin/car-washes/{carWash}          (detalhe)
+  POST /admin/car-washes/{carWash}/approve
+  POST /admin/car-washes/{carWash}/reject
+  POST /admin/car-washes/{carWash}/suspend
+  GET  /admin/car-wash-product-subscriptions        (fila de ativação
+                                                      do clube de
+                                                      lavagem, ver
+                                                      task-9/task-11)
+  POST /admin/car-wash-product-subscriptions/{id}/approve
+  POST /admin/car-wash-product-subscriptions/{id}/reject
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(car-wash): migration rejection_reason em car_washes"
+  2. "feat(car-wash): cadastro self-service do lava-rápido"
+     (form, controller, validações, e-mail de verificação)
+  3. "feat(car-wash): fila de aprovação do admin"
+     (approve/reject/suspend, cada ação auditável)
+  4. "feat(car-wash): ativação self-service do estacionamento"
+  5. "feat(car-wash): solicitação de clube de lavagem + aprovação do admin"
+     (escolha de payout_plan, fila car-wash-product-subscriptions)
+  6. "feat(car-wash): convite de equipe"
+     (aceitar convite via car_wash_invitations)
+  7. "feat(car-wash): seletor de lava-rápido atual (multi car_wash por usuário)"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

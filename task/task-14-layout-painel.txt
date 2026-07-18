@@ -1,0 +1,219 @@
+TASK 14 - Layout do painel (dashboard, sidebar, componentes reutilizáveis)
+================================================================================
+
+OBJETIVO
+--------
+Construir a estrutura visual compartilhada dos dois painéis autenticados
+do projeto — admin (/admin/*) e lava-rápido (/painel/*) — antes de
+qualquer tela de CRUD específica ser construída. A task-6 já definiu a
+paleta de cores e as classes Tailwind; esta task define a ESTRUTURA
+(layout, sidebar, dashboard, componentes) que usa essa paleta.
+
+Sem isso, cada task de tela (4, 5, 9, 10, 11) acabaria inventando sua
+própria estrutura de página — este é o pré-requisito prático que evita
+isso.
+
+ATENÇÃO DE ORDEM (2026-07-17): esta task roda LOGO depois da task-6 na
+ordem de execução — ou seja, ANTES das tasks 4/5/9/10/11, que são quem
+realmente registra as rotas que a sidebar abaixo lista (car-washes.index,
+payment-gateways.index, orders.index etc.). Se cada item do menu chamar
+route('nome') direto, a página quebra (RouteNotFoundException) assim
+que uma rota ainda não registrada for referenciada — e como a sidebar
+aparece em TODO layout autenticado, isso quebraria literalmente
+qualquer tela construída entre esta task e a task em que a rota
+correspondente nascer. Por isso, todo item do menu (seções 2 e 3
+abaixo) precisa checar Route::has('nome-da-rota') antes de tentar
+montar o link — se a rota ainda não existe, o item simplesmente não
+aparece (sem erro), e passa a aparecer sozinho assim que a task
+correspondente registrar a rota, sem precisar tocar nesta task de novo.
+(O pacote spatie/laravel-permission em si, usado pelo @can abaixo, já
+foi instalado antecipadamente na task-3, seção 6 — então os `@can`
+funcionam desde já, só as ROTAS específicas de cada tela é que nascem
+aos poucos.)
+
+
+1. TRÊS LAYOUTS DISTINTOS
+--------------------------------
+  - layouts/admin.blade.php          — painel do admin
+  - layouts/car-wash-panel.blade.php — painel do lava-rápido
+  - layouts/public.blade.php         — já mencionado nas tasks 4/12,
+                                      páginas públicas (home, planos,
+                                      checkout)
+
+Os três compartilham a mesma paleta (task-6), mas têm sidebars/menus
+diferentes o bastante pra merecer arquivos próprios — não devem ser um
+layout único com "if" espalhado por dentro. Podem compartilhar partials
+menores (ex: resources/views/components/badge.blade.php,
+alert.blade.php).
+
+Os três TAMBÉM compartilham o favicon e a logo (task-6, seção 3.1;
+arquivos copiados na task-1): <link rel="icon"
+href="{{ asset('favicon.ico') }}"> no <head> dos três, e a logo
+(public/images/logo.png) no topo da sidebar do admin/lava-rápido, ao
+lado do nome do painel — mesmo cuidado de redimensionar via
+width/height já registrado na task-6 (não usar os 500x500 originais
+soltos numa sidebar estreita).
+
+
+2. SIDEBAR DO ADMIN
+--------------------------
+Itens de menu — cada um só aparece se o admin logado tiver a permission
+correspondente (spatie/laravel-permission, task-11):
+
+  Dashboard
+  Lava-rápidos                          (car-washes.index)
+  Ativação do clube de lavagem          (car-wash-product-subscriptions.index)
+                                         — badge com contador de 'pending'
+  Planos                                (payment-plans.index)
+  Planos de repasse                     (payout-plans.index)
+  Assinantes                            (subscriptions.index)
+  Pedidos                               (orders.index)
+  Repasses                              (payouts.index)
+                                         — badge com contador de 'pending'
+  Solicitações de cancelamento          (cancellation-requests.index)
+                                         — badge com contador de 'pending'
+  Gateways de pagamento                 (payment-gateways.index)
+  Configurações do estacionamento       (parking-billing-settings.edit)
+  Cobranças do estacionamento           (parking-billing-charges.index)
+                                         — badge se houver flagged_for_review
+  Auditoria                             (audits.index)
+
+Os contadores dos badges são queries diretas (count), sem necessidade
+de cache/job na v1 — o volume esperado não justifica a complexidade
+extra ainda.
+
+Implementação de cada item do menu (array de config, não Blade solto):
+  ['label' => 'Lava-rápidos', 'route' => 'car-washes.index',
+   'permission' => 'car-washes.index']
+O componente/partial que itera essa lista só renderiza o item se
+Route::has($item['route']) E auth()->user()->can($item['permission'])
+— as duas checagens, nessa ordem (rota primeiro, mais barata). Isso
+resolve o "ATENÇÃO DE ORDEM" do topo deste arquivo.
+
+
+3. SIDEBAR DO LAVA-RÁPIDO
+--------------------------------
+Itens condicionais conforme o que está ativo (evita mostrar menu de
+algo que o lava-rápido nem contratou):
+
+  Dashboard                             (sempre)
+  Meus produtos                         (sempre — task-5)
+
+  Se car_wash_product_subscriptions('clube_lavagem').status='active':
+    Confirmar lavagem
+    Lavagens (histórico)
+    Repasses
+
+  Se car_wash_product_subscriptions('estacionamento').status='active':
+    Estacionamento (entrada/saída)
+    Tarifas
+    Relatório
+    Cobranças (parking billing)
+
+  Equipe                                (só se o usuário logado for
+                                         'owner' em car_wash_users
+                                         PARA o car_wash atual — um
+                                         'employee' não convida gente)
+
+Seletor de "lava-rápido atual" no topo do painel (não na sidebar),
+visível só quando o usuário tem mais de 1 car_wash vinculado — mesmo
+mecanismo já descrito na task-5, seção 7.
+
+IMPORTANTE pra testabilidade (ver task-13): a regra de "quais itens
+aparecem" NÃO deve ficar espalhada em @if direto no Blade da sidebar —
+extrair pra uma classe simples (ex: App\Support\CarWashPanelMenu),
+recebendo os produtos ativos + o role do usuário naquele car_wash e
+devolvendo a lista de itens visíveis. A view só chama essa classe e
+itera o resultado. Isso é o que permite testar a REGRA como teste
+unitário (sem HTTP/banco), em vez de precisar montar uma requisição
+completa pra cada uma das combinações possíveis.
+
+Diferente da sidebar do admin, os itens da sidebar do lava-rápido
+(Confirmar lavagem, Lavagens, Repasses, Estacionamento...) só nascem em
+tasks que rodam DEPOIS desta (8, 9, 10) — mesmo Route::has() defensivo
+da seção 2 se aplica aqui, dentro da própria CarWashPanelMenu.
+
+
+4. DASHBOARD DO ADMIN (conteúdo)
+--------------------------------------
+Complementa os KPIs já definidos na task-11, seção 2:
+  - Cards de KPI (assinantes ativos, MRR, lava-rápidos aprovados/
+    pendentes, lavagens do mês, repasses pendentes)
+  - Atalhos rápidos pras filas com pendência — cada um mostra o
+    contador e linka direto pra fila filtrada: cadastros pendentes,
+    ativações de clube de lavagem pendentes, cancelamentos pendentes,
+    cobranças de estacionamento sinalizadas (flagged_for_review)
+
+
+5. DASHBOARD DO LAVA-RÁPIDO (conteúdo)
+--------------------------------------
+Só estava esboçado como "status do cadastro" na task-5; detalhando
+aqui:
+
+  - Se car_washes.status != 'approved': a tela mostra SÓ um banner de
+    status (pendente / rejeitado com o motivo / suspenso) — nada mais
+    do dashboard aparece, porque não há produto ativo ainda pra
+    resumir.
+  - Se aprovado: um card por produto ativo, com um resumo relevante:
+      clube de lavagem  -> lavagens confirmadas este mês, repasse
+                          pendente de pagamento
+      estacionamento    -> vagas livres agora, faturamento do mês,
+                          status da cobrança do período (grátis ou %)
+  - Atalho "Confirmar lavagem" em destaque (botão grande, não só item
+    de menu) quando o clube de lavagem está ativo — é a ação mais
+    frequente do dia a dia de quem trabalha no balcão.
+
+
+6. COMPONENTES BLADE REUTILIZÁVEIS
+----------------------------------------
+Além do <x-badge> já definido na task-6:
+
+  <x-card>            container padrão com título opcional
+  <x-stat-tile>        número grande + label, usado nos dashboards (KPIs
+                       e resumos de produto)
+  <x-data-table>       tabela com paginação, cabeçalho ordenável, e
+                       estado vazio embutido (usa <x-empty-state> por
+                       padrão quando não há linhas)
+  <x-empty-state>      ícone + mensagem curta, usado em toda listagem
+                       vazia (ex: "Nenhum lava-rápido pendente",
+                       "Nenhuma lavagem ainda")
+  <x-confirm-modal>    confirmação antes de ações destrutivas/
+                       irreversíveis (aprovar, rejeitar, suspender,
+                       marcar como pago) — evita clique acidental numa
+                       ação sem volta, principalmente as financeiras
+  <x-form-field>       wrapper de label + input + erro de validação,
+                       padroniza os formulários das tasks 4/5/7/9/10/11
+                       (evita repetir a mesma estrutura de
+                       @error/label em cada view)
+
+Construir esses componentes AQUI, antes das telas de CRUD, é o que
+permite que as tasks seguintes só consumam (<x-data-table :rows="...">)
+em vez de reinventar tabela/paginação/estado-vazio a cada tela nova.
+
+
+7. RESPONSIVIDADE
+----------------------
+Sidebar colapsa em menu hambúrguer abaixo do breakpoint md do Tailwind,
+nos dois painéis — funcionário de lava-rápido provavelmente confirma
+lavagem e opera o estacionamento pelo celular, no balcão, não num
+desktop.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(layout): layouts base do admin e do painel do lava-rápido"
+  2. "feat(layout): sidebar do admin com contadores de pendência"
+  3. "feat(layout): sidebar do lava-rápido condicional por produto ativo (CarWashPanelMenu + testes unitários)"
+  4. "feat(ui): componentes reutilizáveis (card, stat-tile, data-table, empty-state, confirm-modal, form-field)"
+  5. "feat(layout): dashboard do admin"
+  6. "feat(layout): dashboard do lava-rápido"
+  7. "feat(layout): responsividade (sidebar colapsável)"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Esta task deveria ser feita logo após a task-6 (identidade visual),
+antes das telas de CRUD específicas de cada módulo (tasks 4, 5, 9, 10,
+11) — elas vão reaproveitar estes layouts/componentes em vez de cada
+uma inventar sua própria estrutura de página. Ver orientacao.txt para o
+índice completo das tasks e a ordem de execução atualizada.

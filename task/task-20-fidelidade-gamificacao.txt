@@ -1,0 +1,194 @@
+TASK 20 - Programa de fidelidade e gamificação (pontos, conquistas, loja de resgate)
+================================================================================
+
+OBJETIVO
+--------
+Dar ao assinante pontos e conquistas (badges) por marcos que ele já
+atinge naturalmente usando o clube (lavagens confirmadas, avaliações
+feitas, indicações concluídas), e uma loja onde ele troca pontos por
+recompensas. Reaproveita o MESMO mecanismo de "bônus de cota" já
+construído na task-16 (indicação) — não inventa uma segunda forma de
+conceder lavagem grátis.
+
+
+1. AJUSTE NO SCHEMA DA TASK-3
+-----------------------------------
+
+achievements   (catálogo de conquistas — gerenciado pelo admin, mesmo
+               padrão de catálogo já usado em payout_plans/plan_features)
+  id
+  code                   string, unique (ex: 'first_wash', '10_washes',
+                         '1_year_member', '5_ratings', '3_referrals' —
+                         é o que o código usa pra checar a regra;
+                         adicionar uma conquista nova = nova linha +
+                         nova checagem no listener, não é 100%
+                         dado-driven, ver seção 3)
+  name                   string (nome de marketing, ex: "Cliente Fiel")
+  description            string
+  icon                   string (emoji ou classe de ícone, ex: "🏆")
+  points_reward          int (quantos pontos a conquista concede ao
+                         desbloquear)
+  active                 boolean, default true
+  created_at / updated_at
+
+user_achievements   (quais conquistas cada assinante já desbloqueou)
+  id
+  user_id                (FK -> users)
+  achievement_id         (FK -> achievements)
+  unlocked_at
+  created_at / updated_at
+
+  unique(user_id, achievement_id)
+
+loyalty_points_ledger   (livro-razão de pontos — nunca um campo único
+                        de saldo, sempre um lançamento por evento, pra
+                        ter histórico auditável de onde cada ponto
+                        veio/foi)
+  id
+  user_id                (FK -> users)
+  points                 int (positivo = ganhou, negativo = gastou)
+  reason                 enum: 'achievement', 'redemption',
+                         'admin_adjustment'
+  reference_type / reference_id   (morphs, nullable — aponta pra
+                         Achievement quando reason='achievement', ou
+                         pra LoyaltyRedemption quando reason=
+                         'redemption')
+  created_at
+
+  Saldo do usuário = SUM(points) desse ledger — calculado na hora
+  (query simples), sem campo de cache na v1 (volume baixo, não
+  justifica a complexidade de manter cache sincronizado).
+
+loyalty_redemptions   (catálogo de recompensas trocáveis por pontos —
+                      gerenciado pelo admin)
+  id
+  name                   string (ex: "1 lavagem grátis", "10% de
+                         desconto na próxima mensalidade")
+  points_cost            int
+  reward_type            enum: 'free_wash', 'discount_next_renewal'
+  active                 boolean, default true
+  created_at / updated_at
+
+  Auditable (mudar points_cost afeta quanto os usuários "pagam" por
+  uma recompensa — mesmo critério já usado em payout_plans).
+
+loyalty_redemption_claims   (registro de CADA resgate feito por um
+                            usuário — não só o catálogo)
+  id
+  user_id                (FK -> users)
+  loyalty_redemption_id  (FK -> loyalty_redemptions)
+  points_spent           int (congelado no momento do resgate — se o
+                         admin mudar points_cost depois, não muda
+                         retroativamente o que já foi gasto)
+  applied_at             (quando a recompensa foi efetivamente
+                         concedida — ver seção 4)
+  created_at / updated_at
+
+
+2. CONQUISTAS DA V1 (SEED)
+--------------------------------
+  first_wash     "Primeira Lavagem"        — 1ª wash_redemptions completed
+  10_washes      "Cliente Fiel"            — 10 wash_redemptions completed
+  50_washes      "Cliente VIP"             — 50 wash_redemptions completed
+  1_year_member  "Um Ano de Clube"         — 12 meses desde a primeira
+                                            subscriptions ativa
+  5_ratings      "Crítico"                 — 5 car_wash_ratings feitas
+  3_referrals    "Embaixador"              — 3 referral_rewards
+                                            status='granted' (task-16)
+
+Cada conquista concede achievement.points_reward pontos ao ser
+desbloqueada (lançamento no ledger, reason='achievement').
+
+
+3. CHECAGEM DAS CONQUISTAS (LISTENERS NOS EVENTOS JÁ EXISTENTES)
+------------------------------------------------------------------------
+Não é um job/cron rodando toda hora — é um listener reagindo aos
+eventos que já disparam na v1 do sistema:
+
+  - Confirmar wash_redemption (task-8) -> checa first_wash/10_washes/
+    50_washes (count de completed do usuário).
+  - Criar car_wash_ratings (task-8) -> checa 5_ratings.
+  - referral_rewards virar 'granted' (task-16) -> checa 3_referrals.
+  - Renovação de subscription_cycles (task-7) -> checa 1_year_member
+    (compara created_at da subscriptions mais antiga do usuário).
+
+Ao desbloquear: cria user_achievements, lança pontos no ledger, e
+dispara notificação (AchievementUnlocked, reaproveitando o sino da
+task-19 — via() = ['database'], sem precisar de e-mail pra isso).
+
+
+4. LOJA DE RESGATE
+------------------------
+Tela "Loja de recompensas" (/fidelidade/loja), assinante:
+  - Lista loyalty_redemptions ativas, com o preço em pontos e se o
+    usuário tem saldo suficiente (botão desabilitado se não tiver).
+  - Resgatar: valida saldo (SUM do ledger >= points_cost), cria
+    loyalty_redemption_claims (points_spent congelado), lança
+    -points_cost no ledger (reason='redemption', reference=claim).
+  - Aplicação da recompensa (applied_at preenchido no mesmo passo,
+    síncrono — não fica pendente esperando ninguém):
+      free_wash             -> soma +1 em quota_total do
+                              subscription_cycles ATUAL do usuário
+                              (MESMO mecanismo já construído na
+                              task-16 pro bônus de indicação — reusar
+                              o método, não duplicar a lógica)
+      discount_next_renewal -> grava um desconto pendente (ex: campo
+                              subscriptions.pending_renewal_discount_
+                              percent, aplicado no próximo cálculo de
+                              amount_cents do order de renovação,
+                              task-7)
+
+  AJUSTE NO SCHEMA (complementa a task-3):
+    subscriptions
+      ...
+      pending_renewal_discount_percent   decimal(5,2), nullable
+                                        (aplicado e ZERADO na próxima
+                                        renovação, não acumula)
+
+
+5. PAINEL DO ASSINANTE
+----------------------------
+Tela "Minha fidelidade" (/fidelidade):
+  - Saldo de pontos atual.
+  - Conquistas desbloqueadas (com ícone) e as ainda bloqueadas em
+    cinza/opaco (mostrar o que falta motiva a continuar usando).
+  - Link pra loja de recompensas.
+  - Extrato (loyalty_points_ledger do usuário, mais recente primeiro).
+
+
+6. PAINEL DO ADMIN
+------------------------
+CRUD achievements.* e loyalty-redemptions.* (mesmo padrão de
+payout-plans.* — catálogo simples, sem tela separada de "aplicação",
+já que a aplicação é toda automática via listener/resgate).
+
+
+7. ROTAS (RESUMO)
+-----------------------
+Assinante (auth):
+  GET  /fidelidade
+  GET  /fidelidade/loja
+  POST /fidelidade/loja/{loyaltyRedemption}/resgatar
+
+Admin:
+  GET/POST  /admin/achievements
+  GET/PUT   /admin/achievements/{achievement}
+  GET/POST  /admin/loyalty-redemptions
+  GET/PUT   /admin/loyalty-redemptions/{loyaltyRedemption}
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(loyalty): migrations de achievements, user_achievements, ledger e redemptions"
+  2. "feat(loyalty): listeners de desbloqueio de conquista nos eventos existentes"
+  3. "feat(loyalty): loja de resgate + aplicação de recompensa (reusa bônus de cota da task-16)"
+  4. "feat(loyalty): tela 'Minha fidelidade' no painel do assinante"
+  5. "feat(admin): CRUD de achievements e loyalty-redemptions"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks — esta task
+depende da task-7 (ciclo de assinatura), task-8 (lavagens/avaliações),
+task-16 (indicações) e task-19 (sino de notificações) já existirem,
+por reaproveitar os mecanismos delas em vez de duplicar.

@@ -1,0 +1,133 @@
+TASK 22 - Gestão de usuários pelo admin (CRUD + visão 360°)
+====================================================================
+
+OBJETIVO
+--------
+Tela do admin pra buscar e ver QUALQUER usuário da plataforma — não só
+assinantes. Hoje (task-11) só existe subscriptions.index/show, presa à
+assinatura: quem nunca assinou (ex: só funcionário de lava-rápido) não
+aparece em lugar nenhum pro admin encontrar. Esta task cria users.index/
+show como visão central da PESSOA, agregando tudo que já existe
+espalhado pelas outras tasks.
+
+
+1. AJUSTE NO SCHEMA DA TASK-3
+-----------------------------------
+Pra suspender uma conta problemática (fraude, abuso, reclamação grave)
+sem precisar apagar nada nem esperar o fluxo normal de cancelamento de
+assinatura resolver isso:
+
+  users
+    ...
+    suspended_at        timestamp, nullable
+    suspension_reason   text, nullable (preenchido só quando suspended_at
+                        não é nulo)
+
+Usuário suspenso não consegue logar (bloqueio no próprio fluxo de auth,
+mensagem clara "conta suspensa, entre em contato com o suporte") —
+independente de ter assinatura ativa, ser dono de lava-rápido etc.
+
+Auditable (adicionar users à lista da task-3, seção 5) — suspender/
+reativar uma conta é ação sensível o bastante pra rastrear quem fez e
+quando.
+
+
+2. TELA users.index (BUSCA)
+----------------------------------
+/admin/users:
+  - Busca por nome, e-mail, CPF ou telefone (não precisa ser exata —
+    LIKE simples já resolve no volume esperado).
+  - Filtro por "papel": tem assinatura ativa / é dono ou funcionário de
+    lava-rápido / admin / suspenso.
+  - Colunas: nome, e-mail, papéis (badges — pode ter mais de um ao
+    mesmo tempo, ver task-3 sobre role='user' e capacidades derivadas
+    das relações), data de cadastro.
+
+
+3. TELA users.show (VISÃO 360°)
+--------------------------------------
+/admin/users/{user} — agrega tudo que já existe, cada bloco reaproveita
+dados/tabelas já modelados, nada de tabela nova além do suspended_at:
+
+  Dados pessoais
+    nome, e-mail (+ verificado?), telefone, CPF, data de cadastro,
+    status (ativo/suspenso — com o motivo se suspenso).
+
+  Assinaturas (reaproveita o que subscriptions.show já mostrava —
+  agora a partir da pessoa, não presa a 1 assinatura só)
+    histórico de subscriptions, ciclos, status.
+
+  Pedidos e pagamentos
+    orders onde user_id = este usuário (cobre tanto mensalidade de
+    clube quanto, se ele for dono de lava-rápido, os
+    parking_billing_charges pagos por ele — orders.user_id já é
+    genérico o bastante pra isso funcionar sem query especial).
+
+  Lavagens resgatadas
+    wash_redemptions via subscription_cycles.subscription.user_id —
+    histórico completo com status (badge da task-6).
+
+  Veículos (task-15)
+    vehicles cadastrados por ele.
+
+  Avaliações feitas (task-8)
+    car_wash_ratings dele.
+
+  Indicações (task-16)
+    como indicador (referral_rewards.referrer_user_id) e como indicado
+    (referred_user_id), com status de cada uma.
+
+  Fidelidade (task-20)
+    conquistas desbloqueadas, saldo de pontos, resgates feitos.
+
+  Vínculo com lava-rápido (task-5)
+    se for owner/employee em algum car_wash_users, lista qual(is)
+    car_wash e o papel — com link pro car-washes.show correspondente
+    (tela que já existe, task-5/11).
+
+  Solicitações de cancelamento abertas (task-8/9/10)
+    cancellation_requests onde requested_by_user_id = este usuário.
+
+
+4. AÇÕES ADMINISTRATIVAS
+--------------------------------
+Propositalmente limitadas — NÃO dá pra editar e-mail/CPF/senha
+diretamente pelo admin (evita abuso/erro de digitação criando
+inconsistência com o que o próprio usuário validou):
+
+  - "Suspender conta" (exige suspension_reason) -> suspended_at=now().
+    Bloqueia login imediatamente, mesmo com sessão ativa (checar no
+    middleware, não só no login).
+  - "Reativar conta" -> suspended_at=null, suspension_reason=null.
+  - "Reenviar e-mail de verificação" (útil pro suporte quando o
+    usuário diz que não recebeu).
+
+  Ambas as duas primeiras são Auditable.
+
+
+5. ROTAS (RESUMO)
+-----------------------
+Admin:
+  GET  /admin/users
+  GET  /admin/users/{user}
+  POST /admin/users/{user}/suspend
+  POST /admin/users/{user}/reactivate
+  POST /admin/users/{user}/resend-verification
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(admin): migration suspended_at/suspension_reason em users"
+  2. "feat(admin): bloqueio de login pra usuário suspenso"
+  3. "feat(admin): tela users.index com busca e filtro por papel"
+  4. "feat(admin): tela users.show agregando assinatura/pedidos/lavagens/veículos/indicações/fidelidade"
+  5. "feat(admin): ações suspender/reativar/reenviar verificação"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks — esta task
+reaproveita dados de praticamente todas as anteriores (3, 5, 7, 8, 9,
+15, 16, 20), então faz mais sentido implementá-la depois que elas já
+existirem, mesmo sendo só leitura agregada (não bloqueia nenhuma
+delas).

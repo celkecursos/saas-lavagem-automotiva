@@ -1,0 +1,426 @@
+TASK 4 - Pagamentos: gateway dinâmico multi-provedor (PagSeguro, Mercado Pago,
+Hotmart etc.)
+================================================================================
+
+OBJETIVO
+--------
+Permitir aceitar pagamento por vários provedores diferentes, cada um com sua
+própria implementação de código, e o ADM escolher qual está ATIVO
+diretamente pelo painel administrativo (sem precisar mexer em código/deploy
+pra trocar de gateway). V1 usa PagSeguro (PagBank), no ambiente sandbox
+(conta PJ já disponível). Mercado Pago, Hotmart etc. entram depois só como
+uma nova classe, sem mudar a estrutura.
+
+Este desenho é uma cópia adaptada do padrão já validado e implementado no
+projeto Celke Payments (task #14 lá) — mesmo padrão de "Strategy resolvido
+por linha de banco" que o `AiServiceFactory` usa pra IA (OpenAI/Claude/
+Gemini) naquele ecossistema. Reaproveitar a mesma arquitetura aqui evita
+reinventar decisões já testadas.
+
+
+1. TABELAS
+--------------
+
+payment_gateway_types   (seed — catálogo de provedores suportados pelo código)
+  id
+  slug                    (unique — ex: 'pagseguro', 'mercado_pago', 'hotmart')
+  name                    (ex: "PagSeguro / PagBank")
+  service_class            (FQCN da classe PHP que implementa o gateway, ex:
+                           App\Services\Payment\PagSeguroGateway)
+  checkout_mode            enum: 'redirect' | 'embedded'
+                           (redirect = manda o cliente pra página hospedada
+                           do provedor; embedded = formulário/SDK JS
+                           dentro do próprio checkout nosso, tokenizando
+                           cartão no browser)
+  requires_api_key         boolean
+  supports_webhook         boolean
+  default_endpoint
+  created_at / updated_at
+
+payment_gateways        (instâncias configuradas — é aqui que o ADM escolhe
+                        qual está ativo)
+  id
+  payment_gateway_type_id  (FK -> payment_gateway_types)
+  label                    string, nullable (rótulo livre pro admin
+                           diferenciar duas instâncias do MESMO tipo,
+                           ex: "PagSeguro - conta principal" vs
+                           "PagSeguro - conta de testes"; exibido na
+                           listagem em vez de só o nome do tipo)
+  credentials              JSON, cast "encrypted:array" no model (nunca
+                           texto puro no banco — testar que realmente sai
+                           criptografado)
+  sandbox_mode              boolean, default true
+  is_active                 boolean, default false
+  created_at / updated_at
+
+  Regra: ativar um gateway desativa os demais (lógica no
+  controller/transação, não constraint de banco — mesmo padrão do
+  ai_providers.is_active).
+
+orders                  (transação, AGNÓSTICA de qual gateway processou)
+  id
+  user_id                  (FK -> users — quem está pagando: o assinante
+                           do clube, ou futuramente um lava-rápido pagando
+                           pelo módulo de estacionamento)
+  payment_gateway_id       (FK -> payment_gateways, nullable até resolver)
+  payable_type / payable_id  (morphs — polimórfico: aponta para
+                           "subscriptions" (mensalidade do assinante) ou
+                           "parking_billing_charges" (cobrança do
+                           estacionamento ao lava-rápido, resolvida na
+                           task-10) — o mesmo checkout/webhook serve
+                           pros dois casos, sem tabela de pedido nova)
+  amount_cents
+  currency                  default 'BRL'
+  recurring_type            enum: 'initial', 'subsequent', nullable
+                            (nullable = pagamento avulso, ex: parking
+                            billing charge — task-10. 'initial' = 1º
+                            pagamento de uma subscription, tokeniza e
+                            salva o cartão. 'subsequent' = renovação
+                            automática usando o cartão salvo em
+                            payment_method_tokens, sem checkout nenhum;
+                            ver seção 5)
+  status                    enum: 'pending', 'paid', 'failed', 'refunded',
+                            'chargeback', 'canceled'
+                            (grafia padronizada com o resto do schema —
+                            revisão 2026-07-16, era 'cancelled' com
+                            duplo L, inconsistente com subscriptions/
+                            car_wash_product_subscriptions/
+                            wash_redemptions que usam 'canceled')
+  external_reference        (id da transação NO gateway)
+  paid_at
+  created_at / updated_at
+
+payment_webhook_events   (log bruto de todo webhook recebido — idempotência
+                        + auditoria)
+  id
+  payment_gateway_id       (FK -> payment_gateways)
+  event_type
+  external_reference
+  payload                   JSON (corpo bruto recebido, pra investigar
+                           divergência depois)
+  processed_at
+  created_at / updated_at
+
+  unique(payment_gateway_id, external_reference, event_type)
+                           -- garante que reprocessar o MESMO webhook (o
+                           provedor reenvia em caso de timeout) não duplica
+                           nada
+
+
+2. CONTRATO (INTERFACE) QUE TODO GATEWAY PRECISA IMPLEMENTAR
+------------------------------------------------------------------
+
+  interface PaymentGatewayInterface
+  {
+      public function createCheckout(Order $order): CheckoutResult;
+      public function handleWebhook(Request $request): WebhookResult;
+      public function verifySignature(Request $request): bool;
+      public function refund(Order $order): bool;   // false = gateway não
+                                                      // suporta via API,
+                                                      // cai pra processo
+                                                      // manual do admin
+
+      // Cobrança automática de renovação, usando um cartão já salvo —
+      // NÃO é um checkout (o assinante não vê/faz nada). Ver seção 5
+      // sobre por que a recorrência é "manual" (nós disparamos), não
+      // o gateway sozinho.
+      public function chargeSavedMethod(Order $order, PaymentMethodToken $method): ChargeResult;
+      public function supportsSavedCardRecurring(): bool;  // false =
+                                                            // gateway não
+                                                            // suporta;
+                                                            // task-7 trata
+                                                            // como falha
+                                                            // de renovação
+  }
+
+  CheckoutResult (DTO): tudo que a view de checkout precisa pra montar a
+  tela — url de redirect (quando checkout_mode = redirect) OU dados pro
+  formulário embutido (quando checkout_mode = embedded).
+
+  WebhookResult (DTO): status resultante ('paid'/'failed'/'refunded'/
+  'chargeback'), externalReference (id da transação no gateway) E
+  orderReference (a NOSSA referência que o gateway ecoa de volta — sem
+  isso o controller do webhook não sabe a qual Order o evento pertence).
+
+  ChargeResult (DTO): status ('paid'/'failed'), externalReference,
+  failureReason (nullable — motivo devolvido pelo gateway quando o
+  cartão salvo falha, ex: "cartão expirado", exibido no e-mail de
+  past_due da task-7).
+
+
+3. FACTORY (RESOLVE QUAL GATEWAY ESTÁ ATIVO)
+--------------------------------------------------
+
+  class PaymentGatewayFactory
+  {
+      public static function make(): PaymentGatewayInterface
+      {
+          // busca payment_gateways ativo (is_active = true)
+          // zero ativos            -> lança PaymentGatewayNotConfiguredException
+          // mais de um ativo (corrida) -> escolhe o de updated_at mais
+          //                              recente + Log::warning
+          //                              (nunca derruba o checkout)
+          // resolve $gateway->type->service_class, class_exists() + new
+      }
+
+      public static function resolveActiveGateway(): ?PaymentGateway
+      {
+          // só o model, sem instanciar a classe — usado no momento de
+          // CRIAR o pedido (pending), pra já gravar qual gateway vai
+          // processar antes do pagamento acontecer (não só no
+          // markPaid())
+      }
+  }
+
+  Isso é o que permite o ADM trocar de gateway sem deploy: troca a linha
+  is_active em payment_gateways, a próxima chamada de make() já resolve
+  pro novo.
+
+
+4. PAINEL DO ADM
+---------------------
+CRUD payment-gateways.* (mesmo padrão de outros CRUDs do projeto):
+  - listar gateways configurados (tipo, sandbox/produção, ativo?)
+  - criar/editar (escolhe o type, preenche credentials do formulário
+    específico daquele tipo, define sandbox_mode)
+  - ação própria "Ativar" (não é efeito colateral do update — evita
+    ativar sem querer ao editar outra coisa)
+
+payment_gateway_types é seed (roda uma vez via seeder), não tem tela de
+CRUD — só o catálogo do que o CÓDIGO sabe processar. Adicionar um
+provedor novo (Mercado Pago, Hotmart) é: nova linha no seeder +
+nova classe implementando PaymentGatewayInterface. Não precisa mexer em
+payment_gateways nem na Factory.
+
+
+5. GATEWAY CONCRETO v1: PAGSEGURO (SANDBOX)
+------------------------------------------------
+PagBank (PagSeguro) tem ambiente sandbox oficial para testes antes de ir
+pra produção com a conta PJ real. Não existe SDK Composer oficial
+mantido — a integração é via API REST (usar o Http client do próprio
+Laravel: Http::withToken(...)->post(...)).
+
+Passos desta fase:
+  1. Criar conta de sandbox no PagBank seguindo o passo a passo oficial:
+     https://developer.pagbank.com.br/docs/crie-sua-conta-pagbank#sandbox
+     — gera token de API separado do ambiente de produção, sem precisar
+     de dados reais da conta PJ pra testar o fluxo inteiro antes de ir
+     pra produção.
+  2. Seed de payment_gateway_types com a linha 'pagseguro' ->
+     service_class = App\Services\Payment\PagSeguroGateway,
+     checkout_mode = 'embedded' (ver 5.1 sobre por que não dá pra usar
+     'redirect' pra assinatura recorrente).
+  3. Implementar PagSeguroGateway implements PaymentGatewayInterface:
+     - createCheckout(): POST na API de Orders do PagBank
+       (https://sandbox.api.pagseguro.com/orders em sandbox). Se
+       Order.recurring_type='initial', o corpo inclui card.encrypted —
+       UM ÚNICO blob criptografado que já contém titular/número/
+       validade/CVV juntos (gerado no browser via
+       PagSeguro.encryptCard(), ver seção 5.3 — o CVV NUNCA trafega
+       separado nem em texto puro, nem pro nosso backend nem pro
+       PagBank), mais recurring.type="INITIAL", store=true. A resposta
+       traz um card.id — grava em payment_method_tokens.
+     - chargeSavedMethod(): POST na MESMA API de Orders, mas com
+       card.id (de payment_method_tokens) + recurring.type=
+       "SUBSEQUENT" — cobrança direta, sem o assinante ver nada. É
+       assim que o scheduler de renovação (task-7, seção 4) cobra
+       automaticamente.
+     - supportsSavedCardRecurring(): retorna true.
+     - handleWebhook(): valida payload do PagBank, resolve
+       orderReference e status.
+     - verifySignature(): header x-authenticity-token = SHA256
+       ("{token}-{payload_bruto_sem_formatar}") — comparar com o hash
+       calculado localmente usando o token da conta. Payload TEM que
+       ser usado exatamente como recebido (espaço/formatação a mais
+       já quebra o hash).
+     - refund(): chama API de reembolso do PagBank (retorna true se
+       processou; false se não suportado nesse fluxo específico, cai
+       pra manual).
+  4. Criar payment_gateways com sandbox_mode = true, is_active = true,
+     credentials = token de sandbox.
+  5. Testar end-to-end no sandbox: 1º pagamento (INITIAL) tokeniza e
+     salva o cartão -> segunda cobrança simulando o scheduler chama
+     chargeSavedMethod() direto (SUBSEQUENT) sem passar por nenhuma
+     tela -> confirma que gera um novo order 'paid' e um
+     subscription_cycles novo (task-7).
+
+Mercado Pago e Hotmart ficam para tasks futuras — quando chegar a hora,
+é só repetir os passos 2-5 com uma classe nova, sem tocar nas tabelas
+nem na Factory. Se o gateway novo NÃO suportar cartão salvo
+(supportsSavedCardRecurring() = false), assinaturas recorrentes só
+funcionam com o PagSeguro até esse gateway ganhar suporte — documentar
+isso na tela de CRUD de gateways (task-11) pra o admin não ativar um
+gateway incompatível como principal enquanto houver assinantes ativos.
+
+
+5.1 POR QUE "RECORRÊNCIA MANUAL" (ORDERS API) E NÃO O PRODUTO
+"ASSINATURAS" DO PAGBANK
+------------------------------------------------------------------------
+O PagBank tem DOIS jeitos de fazer recorrência (pesquisado em
+developer.pagbank.com.br/docs/pagamentos-recorrentes):
+
+  a) Produto "Assinaturas" (Planos + Assinantes + Assinaturas) — API
+     SEPARADA (sandbox.api.assinaturas.pagseguro.com), com credencial
+     própria ("chave pública exclusiva para recorrência"). O PagBank
+     CONTROLA o ciclo e cobra sozinho, avisando via webhooks próprios
+     (subscription.recurrence, .suspended, .canceled etc.). SÓ conta
+     PJ aprovada pode usar via API (PF só tem a versão manual, sem
+     API, pelo painel web) — exige contato com o time de Integrações
+     do PagBank pra liberação em produção.
+  b) Recorrência manual (mesma API de Orders já usada pro resto do
+     projeto) — o COMERCIANTE dispara cada cobrança
+     (card.encrypted + recurring.type=INITIAL na primeira, card.id +
+     recurring.type=SUBSEQUENT nas seguintes). Sem API separada, sem
+     credencial extra, sem exigência adicional de conta.
+
+Escolhido (b) — encaixa exatamente no que a task-7 já desenhava
+("cada renovação aprovada gera um novo order", scheduler diário) sem
+precisar de uma segunda integração/credencial. A desvantagem é que
+NÓS ficamos responsáveis por dar o "run" em cada cobrança (scheduler
+já previsto na task-7) — mas isso já era assim no desenho original,
+só não estava explícito COMO o cartão seria reutilizado a cada ciclo.
+
+
+5.2 CARTÕES DE TESTE DO SANDBOX (developer.pagbank.com.br/docs/cartoes-de-teste)
+------------------------------------------------------------------------------------------
+Nunca usar cartão real em sandbox — o PagBank fornece uma tabela de
+cartões fictícios que simulam aprovado/recusado automaticamente na
+autorização, sem precisar de nenhum valor especial pra "forçar" o
+resultado:
+
+  Bandeira    | Nº do cartão      | CVV  | Validade | Resultado
+  ------------|-------------------|------|----------|------------------
+  Visa        | 4539620659922097  | 123  | 12/2026  | Aprovado (PAID)
+  Visa        | 4929291898380766  | 123  | 12/2026  | Recusado
+  Mastercard  | 5240082975622454  | 123  | 12/2026  | Aprovado (PAID)
+  Mastercard  | 5530062640663264  | 123  | 12/2026  | Recusado
+  Amex        | 345817690311361   | 1234 | 12/2026  | Aprovado (PAID)
+  Amex        | 372938001199778   | 1234 | 12/2026  | Recusado
+  Elo         | 4514161122113757  | 123  | 12/2026  | Aprovado (PAID)
+  Elo         | 4389350446134811  | 123  | 12/2026  | Recusado
+  Hiper       | 6062828598919021  | 123  | 12/2026  | Aprovado (PAID)
+  Hiper       | 6062822916014409  | 123  | 12/2026  | Recusado
+
+Como usar nos testes desta task (mapeando pro nosso recurring_type,
+seção 1):
+
+  - Checkout inicial aprovado (recurring_type='initial'): tokenizar
+    com o cartão Visa "Aprovado" -> confirma que payment_method_tokens
+    é criado e a subscription vira 'active'.
+  - Checkout inicial recusado: tokenizar com o cartão Visa "Recusado"
+    -> confirma que NÃO cria payment_method_tokens e a subscription
+    fica 'incomplete' (nunca chega a 'active'), com mensagem de erro
+    amigável (task-7).
+  - Renovação aprovada (recurring_type='subsequent'): como o token
+    salvo já existe (gerado no passo anterior com o cartão aprovado),
+    chargeSavedMethod() reaproveita o MESMO card.id — pra testar uma
+    renovação que falha, o teste precisa criar o payment_method_tokens
+    inicial já a partir do fluxo com o cartão recusado simulado
+    manualmente no factory/seed de teste (a API do PagBank não
+    consegue "aprovar a 1ª e recusar a 2ª" pro mesmo cartão salvo — isso é
+    simulado no NOSSO teste, mockando a resposta de chargeSavedMethod
+    pra 'failed' na segunda chamada).
+  - Reembolso: a doc do PagBank não lista cartão/valor especial pra
+    reembolso — basta chamar o endpoint de reembolso normalmente
+    contra um Order já 'paid' (criado com qualquer cartão "Aprovado"
+    da tabela). Testar o fluxo completo: Order paga -> refund() ->
+    Order vira 'refunded'.
+
+O PagBank também tem cartões dedicados (D0/DN) pro produto nativo
+"Assinaturas" simulando retry automático de cobrança — não se aplicam
+aqui porque escolhemos recorrência manual (seção 5.1 acima): nosso
+retry de renovação falhada é o comando subscriptions:renew tentando de
+novo todo dia durante a carência (task-7), não um mecanismo do gateway.
+
+
+5.3 PÁGINA DE CHECKOUT EMBEDDED (LACUNA CORRIGIDA — 2026-07-16)
+------------------------------------------------------------------------
+A task-7 só tinha o POST /planos/{plan}/assinar (processa) — faltava a
+tela em si que MOSTRA o formulário de cartão antes disso. Corrigido:
+
+  GET /planos/{plan}/checkout   (nova rota, ver task-7 seção 8)
+    - Tela própria do projeto (não é redirect pro PagBank) com: resumo
+      do plano escolhido + formulário de cartão (nome no cartão,
+      número, validade, CVV) + botão "Assinar".
+    - Inclui o script oficial do PagBank antes do </body>:
+      <script src="https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js"></script>
+    - Ao submeter, o JS da página chama PagSeguro.encryptCard() ANTES
+      de qualquer requisição pro nosso backend:
+        PagSeguro.encryptCard({
+          publicKey: '{{ chave pública do gateway ativo }}',
+          holder, number, expMonth, expYear, securityCode
+        })
+      Isso roda 100% no browser (a doc do PagBank confirma: "não
+      requer chamada de servidor", é local) — o resultado é UM
+      encryptedCard (string), e é só ISSO que vai no POST pro nosso
+      backend. Número/CVV em texto puro NUNCA saem do browser, nunca
+      chegam no Laravel — reduz nosso escopo de PCI DSS a
+      praticamente zero (não armazenamos nem processamos cartão em
+      texto puro em nenhum momento).
+    - O formulário faz o POST /planos/{plan}/assinar (fetch/axios) só
+      com { plan_id, encrypted_card: <resultado do encryptCard()> } —
+      o Controller usa esse valor direto como card.encrypted na
+      chamada da seção 3 acima.
+    - A chave pública usada no JS é a mesma guardada em
+      payment_gateways.credentials do gateway ativo (task-4) —
+      exposta só a chave PÚBLICA na view (nunca o token/segredo da
+      API, que fica só no backend).
+
+Sem essa página, não existe como o usuário realmente pagar — este item
+era uma peça faltando entre a decisão (checkout_mode='embedded') e a
+implementação de fato.
+
+
+6. AUDITORIA (owen-it/laravel-auditing)
+--------------------------------------------
+Seguindo o mesmo critério definido na task-3: tudo que é financeiro ou
+de configuração sensível precisa ser Auditable.
+
+  - payment_gateways     (troca de qual gateway está ativo, mudança de
+                          credentials/sandbox_mode — quem trocou e
+                          quando é informação crítica se um pagamento
+                          falhar depois de uma troca)
+  - orders               (todo o ciclo pending -> paid/failed/refunded/
+                          chargeback)
+
+payment_webhook_events NÃO precisa auditoria própria — ele já É o
+registro bruto/imutável do evento (log, não estado mutável).
+
+
+7. LIGAÇÃO COM O RESTO DO SISTEMA
+---------------------------------------
+- subscriptions (task-3) ganha o vínculo reverso: quando um Order com
+  payable_type = Subscription é marcado 'paid', o webhook handler ativa/
+  renova a subscription correspondente (mesma lógica de "renovação gera
+  ciclo novo" da task-3, seção 3).
+- Reembolso de uma lavagem já resgatada (wash_redemptions) é assunto da
+  task-9 (repasse) — não deste task-4. Aqui só cuidamos do pagamento da
+  MENSALIDADE do assinante para a plataforma.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(payments): migrations de gateway dinâmico"
+     (payment_gateway_types, payment_gateways)
+  2. "feat(payments): migrations de pedidos, webhooks e cartão salvo"
+     (orders com recurring_type, payment_webhook_events,
+     payment_method_tokens)
+  3. "feat(payments): interface e factory do gateway"
+     (PaymentGatewayInterface com chargeSavedMethod, CheckoutResult,
+     WebhookResult, ChargeResult, PaymentGatewayFactory)
+  4. "feat(payments): CRUD admin de gateways de pagamento"
+     (controller, requests, views, rotas, permissões)
+  5. "feat(payments): tela de checkout embedded (SDK JS + encryptCard)"
+  6. "feat(payments): implementa gateway PagSeguro — 1º pagamento (INITIAL) tokenizando cartão"
+  7. "feat(payments): implementa chargeSavedMethod do PagSeguro (SUBSEQUENT)"
+     (só depois de ter credenciais de sandbox reais em mãos)
+
+Testar os commits 5-7 de ponta a ponta no sandbox ANTES de dar push —
+é o tipo de integração que só se prova funcionando de verdade, não só
+compilando.
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

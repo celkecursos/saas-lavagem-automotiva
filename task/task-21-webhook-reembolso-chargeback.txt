@@ -1,0 +1,174 @@
+TASK 21 - Webhook de reembolso e chargeback
+==================================================
+
+OBJETIVO
+--------
+Tratar de verdade os eventos de reembolso (solicitado pelo assinante,
+dentro do direito de arrependimento do CDC ou depois via admin) e
+chargeback (contestação pelo banco emissor do cartão, sempre via
+webhook, nunca solicitado por ninguém aqui dentro). A task-11 já tinha
+deixado isso marcado como pendência ("sem ação de reembolso na v1...
+replicando o padrão de RefundService já validado" no Celke Payments) —
+esta task fecha essa lacuna.
+
+Reembolso e chargeback são coisas DIFERENTES:
+  - Reembolso: alguém (assinante ou admin) PEDE, dentro de um fluxo
+    nosso, com aprovação.
+  - Chargeback: o BANCO do cliente contesta a cobrança direto com o
+    PagBank — chega pra gente já como fato consumado via webhook, sem
+    pedido prévio nosso.
+
+Os dois têm o MESMO efeito no final (dinheiro devolvido, assinatura
+revogada), mas o CAMINHO até lá é diferente.
+
+
+1. AJUSTE NO SCHEMA DA TASK-3
+-----------------------------------
+
+order_refund_requests   (solicitação de reembolso de um order — só
+                        pra reembolso, não pra chargeback, que não
+                        passa por solicitação)
+  id
+  order_id               (FK -> orders)
+  requested_by_user_id   (FK -> users — quem pediu: o próprio
+                         assinante ou um admin agindo por ele)
+  initiated_by           enum: 'self_service', 'admin'
+  reason                 text
+  status                 enum: 'approved', 'processed', 'failed_manual'
+                         (NÃO existe 'pending' aqui — a AÇÃO de pedir
+                         já é a decisão, tanto self-service quanto
+                         admin auto-aprovam na criação; só falta
+                         processar de fato no gateway. Mesmo padrão já
+                         validado no Celke Payments.)
+  requested_at
+  processed_at           (nullable — quando o gateway confirmou o
+                         estorno de fato)
+  created_at / updated_at
+
+refund_settings   (singleton — mesmo padrão de outras configurações
+                  globais do projeto, ex: parking_billing_settings)
+  id
+  extended_self_service_enabled     boolean, default false
+  extended_self_service_until_days  int, nullable
+  updated_at
+
+  Os 7 dias iniciais de direito de arrependimento (CDC art. 49) são
+  FIXOS, não configuráveis — sempre self-service automático nesse
+  prazo. Depois do dia 7, o admin decide via este singleton: se
+  enabled=true, o self-service continua disponível até
+  until_days; se false, só admin processa depois do dia 7.
+
+Ambas Auditable (adicionar à lista da task-3, seção 5) — reembolso é
+dinheiro saindo, sempre rastreável.
+
+
+2. REEMBOLSO — FLUXO PASSO A PASSO
+----------------------------------------
+
+Passo 1 — Assinante solicita (self-service, dentro da janela)
+  Tela do pedido (/pedidos/{order}, já mencionada na task-7):
+  - Botão "Solicitar reembolso" visível só se: order.status='paid' E
+    dentro da janela (7 dias corridos desde paid_at, OU até
+    extended_self_service_until_days se refund_settings.
+    extended_self_service_enabled=true) E não existe já um
+    order_refund_requests pra esse order.
+  - RefundService::requestSelfService($order, $reason): cria
+    order_refund_requests (initiated_by='self_service',
+    status='approved', requested_at=now()) e tenta processar na hora
+    (passo 3).
+
+Passo 2 — Admin solicita em nome do assinante (fora da janela, ou
+qualquer motivo de suporte)
+  Tela /admin/orders/{order}, ação "Reembolsar" (requer permission
+  orders.refund):
+  - RefundService::requestByAdmin($order, $reason, $admin): mesma
+    lógica do passo 1, initiated_by='admin', requested_by_user_id=
+    admin atual.
+
+Passo 3 — Processamento (tentativa imediata, os dois casos)
+  - Chama $gateway->refund($order) (interface já definida na task-4).
+  - Retorna true (gateway processou): order_refund_requests.
+    status='processed', processed_at=now(); order.status='refunded'.
+  - Retorna false (gateway não suporta estorno via API nesse fluxo):
+    order_refund_requests.status='failed_manual' — fica visível numa
+    fila do admin (/admin/order-refund-requests, filtro
+    status='failed_manual') com ação "Marcar processado manualmente"
+    (depois de estornar por fora, ex: painel do próprio gateway) ->
+    só então order.status='refunded'.
+
+Passo 4 — Revogação (SEMPRE que order.status vira 'refunded',
+independente do caminho)
+  - Se order.payable_type=Subscription: subscriptions.status=
+    'canceled' IMEDIATAMENTE (canceled_at=now()) — diferente do
+    cancelamento self-service comum (task-7, que deixa rodar até
+    current_period_end); aqui o dinheiro já voltou, o acesso não pode
+    continuar. Motivo gravado (ex: campo/log "canceled_reason=
+    refund") pra distinguir de um cancelamento voluntário normal.
+  - Se order.payable_type=ParkingBillingCharge (task-10): só marca a
+    charge como revertida, não tem "acesso" pra revogar.
+
+  LIMITAÇÃO CONHECIDA (documentada de propósito, mesmo padrão já usado
+  em outras tasks pra casos parecidos): reembolsar/chargeback NÃO
+  desfaz retroativamente wash_redemptions já confirmados nem payouts
+  já pagos aos lava-rápidos pelas lavagens daquele ciclo — o lava-rápido
+  já prestou o serviço e já foi ou será pago normalmente. A plataforma
+  absorve essa perda pontual (mesmo risco que qualquer negócio de
+  assinatura tem com estorno/fraude); não é resolvido reclamando do
+  lava-rápido.
+
+
+3. CHARGEBACK — FLUXO (SEM SOLICITAÇÃO PRÉVIA)
+------------------------------------------------------
+Chega só via webhook (PaymentWebhookController, task-4), WebhookResult.
+status='chargeback':
+  1. order.status='chargeback', paid_at mantido (histórico).
+  2. Passo 4 da seção 2 roda igual (revogação imediata se for
+     Subscription) — SEM passar por order_refund_requests, já que
+     ninguém pediu nada aqui, é reação direta ao webhook.
+  3. Dispara notificação pro admin (reaproveita o sino da task-19—
+     ChargebackReceived, via=['mail','database']) — chargeback costuma
+     ter implicação financeira/fraude que vale revisão humana, mesmo
+     que a ação de revogar já tenha acontecido automaticamente.
+
+
+4. PAINEL DO ADMIN
+------------------------
+  - /admin/orders/{order}: ação "Reembolsar" (seção 2, passo 2) e
+    exibição do histórico se já foi reembolsado/chargeback.
+  - /admin/order-refund-requests: fila de status='failed_manual'
+    aguardando confirmação manual (seção 2, passo 3).
+  - /admin/refund-settings (singleton): liga/desliga a janela
+    estendida de self-service e define até quantos dias.
+
+
+5. ROTAS (RESUMO)
+-----------------------
+Assinante (auth):
+  POST /pedidos/{order}/solicitar-reembolso
+
+Admin:
+  POST /admin/orders/{order}/refund
+  GET  /admin/order-refund-requests
+  POST /admin/order-refund-requests/{id}/mark-processed
+  GET  /admin/refund-settings/edit
+  PUT  /admin/refund-settings
+
+Webhook: já coberto na task-4 (POST /webhooks/{gatewayTypeSlug}) — só
+precisa tratar status='refunded'/'chargeback' além de 'paid'/'failed'
+já existentes.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(refunds): migrations de order_refund_requests e refund_settings"
+  2. "feat(refunds): RefundService (self-service e admin, mesma auto-aprovação na criação)"
+  3. "feat(refunds): revogação imediata de subscription ao reembolsar/chargeback"
+  4. "feat(refunds): webhook trata chargeback + notificação pro admin"
+  5. "feat(admin): telas de reembolso, fila manual e refund-settings"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks — esta task
+depende da task-4 (gateway/webhook), task-7 (subscriptions) e task-19
+(sino de notificações) já existirem.

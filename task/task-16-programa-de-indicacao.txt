@@ -1,0 +1,121 @@
+TASK 16 - Programa de indicação (indique um amigo, ganhe uma lavagem grátis)
+================================================================================
+
+OBJETIVO
+--------
+Cada assinante ganha um código de indicação próprio. Quando um amigo se
+cadastra com esse código E confirma a primeira assinatura paga, o
+indicador ganha 1 lavagem bônus (soma na cota do ciclo atual/próximo).
+Reaproveita quase 100% do schema já existente (users, subscriptions,
+subscription_cycles) — só uma tabela nova pra rastrear o relacionamento
+indicador/indicado.
+
+
+1. AJUSTE NO SCHEMA DA TASK-3
+-----------------------------------
+
+users ganha:
+  referral_code         string, unique (gerado automaticamente na
+                        criação do user — 8 caracteres alfanuméricos,
+                        maiúsculo, ex: "K3F9XQ2A")
+  referred_by_user_id   (FK -> users, nullable — quem indicou este
+                        usuário, preenchido só se ele se cadastrou com
+                        um código válido)
+
+referral_rewards   (rastreia cada indicação e o status do bônus)
+  id
+  referrer_user_id       (FK -> users — quem indicou)
+  referred_user_id       (FK -> users, unique — cada pessoa indicada só
+                         gera 1 linha, mesmo que troque de plano depois)
+  status                 enum: 'pending', 'qualified', 'granted'
+  qualified_at           (nullable — quando o amigo confirmou a
+                         primeira assinatura paga)
+  granted_subscription_cycle_id  (FK -> subscription_cycles, nullable —
+                         em qual ciclo do INDICADOR o bônus foi
+                         efetivamente aplicado)
+  granted_at             (nullable)
+  created_at / updated_at
+
+Não é necessário Auditable — não é ação financeira/aprovação de
+staff, é um mecanismo automático entre usuários.
+
+
+2. FLUXO PASSO A PASSO
+----------------------------
+
+Passo 1 — Geração do código (automática)
+  - Ao criar qualquer user (observer ou no próprio create), gera
+    referral_code único (retry em caso de colisão, é só um alfanumérico
+    curto).
+
+Passo 2 — Cadastro com código de indicação (ajuste na task-7)
+  - Tela de registro (/registro) ganha um campo OPCIONAL "Código de
+    indicação (opcional)".
+  - Se preenchido e válido (existe um user com esse referral_code, e
+    não é o próprio usuário se cadastrando — nunca aceitar
+    autoindicação): grava users.referred_by_user_id e cria
+    referral_rewards (referrer_user_id, referred_user_id=novo user,
+    status='pending').
+  - Código inválido: mensagem de erro simples, não bloqueia o resto do
+    cadastro (o campo é opcional, um código errado não devia travar
+    quem só queria se cadastrar sem indicação).
+
+Passo 3 — Qualificação (ajuste na task-7, webhook de pagamento)
+  - Quando a subscription do INDICADO vira 'active' pela primeira vez
+    (primeiro webhook 'paid' confirmado, task-7): busca
+    referral_rewards onde referred_user_id = esse usuário e
+    status='pending' -> status='qualified', qualified_at=now().
+  - Por que exigir pagamento confirmado (não só cadastro)? Evita que
+    alguém crie contas fake só pra gerar bônus sem nunca virar cliente
+    de verdade.
+
+Passo 4 — Concessão do bônus (ajuste na task-7, criação de subscription_cycles)
+  - Toda vez que um subscription_cycles novo é criado PRO INDICADOR
+    (ativação inicial ou renovação — mesmo ponto de código que já cria
+    o ciclo na task-7): verifica se há referral_rewards com
+    referrer_user_id = esse usuário e status='qualified' aguardando.
+  - Se houver (pode haver mais de uma indicação qualificada
+    acumulada): para cada uma, soma +1 em quota_total DESSE ciclo novo,
+    marca status='granted', granted_subscription_cycle_id, granted_at.
+  - Isso garante que o bônus nunca se perde — só fica em fila até o
+    indicador ter um ciclo novo pra receber (mesmo se a assinatura dele
+    tiver caído no meio do caminho).
+
+
+3. PAINEL DO ASSINANTE
+----------------------------
+Tela "Minhas indicações" (/indicacoes):
+  - Mostra o próprio referral_code, com botão de copiar/compartilhar
+    (link pronto tipo /registro?ref=K3F9XQ2A que já pré-preenche o
+    campo do Passo 2).
+  - Lista das indicações feitas, com status (badge conforme cores
+    novas na task-6): pending -> secondary, qualified -> info,
+    granted -> success.
+  - Contador "você já ganhou X lavagens grátis por indicação".
+
+
+4. ROTAS (RESUMO)
+-----------------------
+Assinante (auth):
+  GET /indicacoes
+
+Público:
+  GET /registro?ref={code}   (pré-preenche o campo de indicação —
+                              rota já existe na task-7, só ganha o
+                              query param)
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(referral): migrations de referral_code e referral_rewards"
+  2. "feat(referral): geração automática de código na criação do user"
+  3. "feat(referral): campo de código no cadastro + qualificação no primeiro pagamento"
+  4. "feat(referral): concessão do bônus na criação de subscription_cycles"
+  5. "feat(referral): tela 'Minhas indicações' no painel do assinante"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução — esta task depende da task-7 (onboarding do assinante e
+ciclo de assinatura) já existir.

@@ -1,0 +1,209 @@
+TASK 6 - Identidade visual: paleta de cores (reaproveitada do projeto adm)
+================================================================================
+
+OBJETIVO
+--------
+Definir a paleta de cores do SaaS reaproveitando diretamente o que já é
+usado no projeto celke-nota-corte-administrativo-v1-adm, em vez de criar
+uma paleta nova do zero. Isso mantém consistência visual entre os
+sistemas Celke e evita decisões arbitrárias de cor sem necessidade.
+
+Framework de CSS: Tailwind CSS (mesmo do adm). Todas as cores, classes
+utilitárias e componentes descritos abaixo pressupõem Tailwind — nada de
+CSS customizado à mão fora do bloco theme.extend do tailwind.config.js e
+das classes @apply em resources/css/app.css. O próprio scaffold padrão
+do Laravel (Breeze) já vem com Tailwind configurado, então isso não
+exige nenhuma instalação extra além do que a task-1 já prevê.
+
+Esta decisão SUBSTITUI a paleta hex discutida anteriormente (Primária
+#0F62FE, Accent #38BDF8, Sucesso #22C55E etc.) — nada daquilo chegou a
+virar código, então não há nada para reverter, só seguir com a direção
+abaixo a partir daqui.
+
+
+1. CORES SEMÂNTICAS — BOTÕES, BADGES, ALERTAS (Tailwind puro)
+------------------------------------------------------------------
+São classes utilitárias do Tailwind sem hex customizado — mesmo padrão
+usado no adm em resources/css/app.css. Replicar tal e qual neste projeto.
+
+Botões:
+  .btn-primary     bg-blue-500 text-white     hover:bg-blue-600
+  .btn-danger      bg-red-500 text-white      hover:bg-red-600
+  .btn-secondary   bg-gray-500 text-white     hover:bg-gray-600
+                   (dark: bg-gray-600 hover:bg-gray-700)
+
+Badges (uso solto em views, sem componente Blade dedicado no adm — mas
+recomendo criar um componente <x-badge status="..."> aqui desde já, ver
+seção 4):
+  primary/info azul    bg-blue-100 text-blue-800     dark: bg-blue-900 text-blue-300
+  secondary/cinza      bg-gray-100 text-gray-800     dark: bg-gray-700 text-gray-300
+  success              bg-green-100 text-green-800   dark: bg-green-900 text-green-300
+  danger               bg-red-100 text-red-800       dark: bg-red-900 text-red-300
+  warning              bg-yellow-100 text-yellow-800 dark: bg-yellow-900 text-yellow-300
+  info (ciano)         bg-cyan-100 text-cyan-800     dark: bg-cyan-900 text-cyan-300
+
+Alertas / mensagens flash (.alert-*, com borda, p-3 my-3 text-sm
+rounded-lg border):
+  primary   text-blue-800 bg-blue-100 border-blue-200
+  info      text-cyan-800 bg-cyan-100 border-cyan-200
+  success   text-green-800 bg-green-100 border-green-200
+  warning   text-yellow-800 bg-yellow-100 border-yellow-200
+  danger    text-red-800 bg-red-100 border-red-200
+
+Essas combinações já são seguras em termos de contraste (par -100/-800
+no claro, -900/-300 no escuro) — diferente das cores hex puras (#22C55E
+etc.) que reprovaram no teste de contraste feito antes.
+
+
+2. MAPEAMENTO PARA OS STATUS DO DOMÍNIO (task-3)
+------------------------------------------------------
+Usar as cores semânticas acima consistentemente em cada enum de status
+já modelado:
+
+  car_washes.status
+    pending    -> warning (amarelo)
+    approved   -> success (verde)
+    rejected   -> danger (vermelho)
+    suspended  -> secondary (cinza)
+
+  car_wash_product_subscriptions.status
+    pending    -> warning (aguardando aprovação do admin — só relevante
+                pra 'clube_lavagem', ver task-5)
+    active     -> success
+    suspended  -> secondary
+    canceled   -> danger
+
+  subscriptions.status
+    incomplete -> info (ciano) (renomeado de 'trialing' — ver task-3)
+    active     -> success
+    past_due   -> warning
+    canceled   -> danger
+
+  orders.status
+    pending      -> warning
+    paid         -> success
+    failed       -> danger
+    refunded     -> info (ciano)
+    chargeback   -> danger
+    canceled     -> secondary (grafia padronizada — ver task-4)
+
+  cancellation_requests.status
+    pending    -> warning
+    approved   -> success
+    rejected   -> danger
+
+  wash_redemptions.status
+    requested  -> info (ciano)
+    completed  -> success
+    expired    -> secondary (cinza)
+    canceled   -> danger
+
+  payouts.status
+    pending  -> warning
+    paid     -> success
+    failed   -> danger
+
+  parking_sessions.status
+    open      -> info (ciano)
+    closed    -> secondary
+    canceled  -> danger
+
+  referral_rewards.status (task-16)
+    pending    -> secondary (cinza)
+    qualified  -> info (ciano)
+    granted    -> success
+
+  order_refund_requests.status (task-21)
+    approved       -> info (ciano)
+    processed      -> success
+    failed_manual  -> warning
+
+
+3. CORES DE FUNDO / MARCA (tailwind.config.js)
+----------------------------------------------------
+Copiar direto o bloco extend.colors do adm:
+
+  background            #080838   (fundo geral escuro / item ativo do menu)
+  backgroundsecond       #04041d   (navbar / sidebar)
+  backgroundthird        #151541
+  backgroundfourth       #000011
+  backgroundfifth        #000022
+  colortext              #003ae9
+  colortextsecond        #0d47f8
+
+  Variante dark mode (classe "dark" no <html>, @apply dark:*):
+  backgrounddark          #000000
+  backgroundseconddark    #0c0d0d
+  backgroundthirddark     #0e0f0f
+  backgroundfourthdark    #161717
+  backgroundfifthdark     #252525
+  colortextdark / colortextseconddark   (mesmos valores dos claros)
+
+  Fundo geral do dashboard:
+    modo claro   -> bg-gray-100
+    modo escuro  -> bg-backgrounddark
+
+  Sidebar/navbar: bg-backgroundsecond, item ativo bg-background
+  Texto padrão em sidebar/navbar: text-gray-400 (hover/ativo: text-gray-200)
+
+Observação: esse conjunto de cores de fundo é arbitrário no próprio adm
+(nomes genéricos, sem hierarquia semântica) — copiamos mesmo assim pela
+consistência visual entre sistemas, não porque seja um design system
+exemplar. Se um dia quiser reforçar identidade própria do SaaS de
+lavagem (ex: página pública de marketing/vitrine de planos, fora do
+painel logado), pode-se introduzir cor de destaque própria só ali, sem
+tocar no painel administrativo/painel do lava-rápido.
+
+
+3.1 ASSETS DE MARCA (FAVICON E LOGO, JÁ COPIADOS NA TASK-1)
+------------------------------------------------------------------
+A task-1 (Passo 5) já copia dois arquivos que ficavam soltos junto das
+tasks (saas-lavagem-automotiva/favicon.ico e
+logo-define-500x500_v3.png) pra dentro de public/ do projeto:
+
+  public/favicon.ico          — usar via <link rel="icon"
+                                href="{{ asset('favicon.ico') }}"> no
+                                <head> de TODOS os layouts (admin,
+                                painel do lava-rápido, público — task-14
+                                e task-12).
+  public/images/logo.png      — a logo em si (PNG 500x500,
+                                transparente). Usar via
+                                {{ asset('images/logo.png') }} no
+                                cabeçalho/menu de cada layout (task-12,
+                                seção 4; task-14, seções 2-3).
+
+VERIFICAR antes de usar em cada lugar se a logo precisa ser
+redimensionada: é um arquivo quadrado grande (500x500), então um
+cabeçalho normal (logo pequena ao lado do nome do site/painel) precisa
+de width/height explícito no HTML (ex: w-10 h-10 no Tailwind) — nunca
+deixar o navegador exibir o arquivo original em tamanho pequeno sem
+essas classes, senão carrega os 500x500 à toa. Em lugares que pedem uma
+versão maior (ex: seção de rodapé/sobre da home, task-12), o arquivo
+original já serve sem precisar redimensionar de verdade.
+
+
+4. IMPLEMENTAÇÃO
+---------------------
+- Copiar o bloco theme.extend.colors do tailwind.config.js do adm para
+  o tailwind.config.js deste projeto.
+- Criar as mesmas classes utilitárias (.btn-primary, .btn-danger,
+  .btn-secondary, .badge-*, .alert-*) em resources/css/app.css via
+  @apply, idêntico ao adm.
+- Diferente do adm (que usa as classes soltas direto nas views), vale
+  criar aqui um componente Blade <x-badge :status="$model->status" />
+  que resolve a cor automaticamente a partir do mapeamento da seção 2 —
+  evita decorar bg-*-100/text-*-800 espalhado pelas views e erro de
+  digitação.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "style: configura paleta de cores reaproveitada do adm no tailwind.config.js"
+  2. "style: classes utilitárias de botão/badge/alerta (@apply, resources/css/app.css)"
+  3. "feat(ui): componente <x-badge> para status do domínio"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

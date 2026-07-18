@@ -1,0 +1,133 @@
+TASK 15 - Cadastro de veículo do assinante
+================================================
+
+OBJETIVO
+--------
+Permitir que o assinante cadastre o(s) veículo(s) dele e vincule cada
+resgate de lavagem (task-8) a um veículo específico — hoje o fluxo de
+resgate gera um código sem nunca perguntar QUAL carro vai ser lavado,
+o que dificulta o funcionário identificar o veículo no balcão e tira
+contexto de uma eventual disputa/cancelamento (task-8, seção 2, passo 8).
+
+
+1. AJUSTE NO SCHEMA DA TASK-3
+-----------------------------------
+
+vehicles   (veículos do assinante — independente de qual subscription
+           está ativa no momento, pra manter histórico mesmo se ele
+           cancelar e assinar de novo depois)
+  id
+  user_id         (FK -> users, o assinante dono do veículo)
+  plate           string, unique (formato antigo ABC1234 ou Mercosul
+                  ABC1D23 — validar os dois padrões)
+  brand           string, nullable (ex: "Volkswagen")
+  model           string, nullable (ex: "Gol")
+  color           string, nullable (ex: "Prata")
+  active          boolean, default true (permite "arquivar" um veículo
+                  vendido sem apagar o histórico de lavagens dele)
+  created_at / updated_at
+  deleted_at      (soft delete — wash_redemptions.vehicle_id continua
+                  válido mesmo se o veículo for removido)
+
+wash_redemptions ganha:
+  vehicle_id      (FK -> vehicles, nullable até a geração do código;
+                  obrigatório a partir desta task — sem veículo
+                  cadastrado, não é possível gerar o código de resgate)
+
+Não é necessário Auditable pra vehicles — é dado descritivo do próprio
+assinante sobre a própria propriedade, mesmo critério não-financeiro já
+usado pra plan_features (task-11).
+
+
+2. CADASTRO DE VEÍCULO (SELF-SERVICE)
+--------------------------------------------
+Tela "Meus veículos" (/veiculos), no painel do assinante:
+  - Listar veículos ativos do usuário logado.
+  - "Adicionar veículo": placa (obrigatória, validada nos dois formatos
+    — antigo e Mercosul, com máscara no input), marca/modelo/cor
+    (opcionais — não bloquear cadastro rápido por falta desses dados).
+  - "Editar" um veículo já cadastrado.
+  - "Remover" -> soft delete (active=false, deleted_at preenchido) —
+    não aparece mais na lista pra escolher num novo resgate, mas o
+    histórico de lavagens antigas continua mostrando o veículo
+    corretamente.
+
+Validações:
+  - placa única (não permite cadastrar uma placa já registrada por
+    OUTRO usuário — evita um assinante "roubar" o carro de outro no
+    cadastro; se a mesma pessoa tentar cadastrar a própria placa já
+    cadastrada, mensagem clara de duplicidade).
+  - formato de placa (regex pros dois padrões brasileiros) — IMPLEMENTAR
+    como uma Rule própria (App\Rules\BrazilianLicensePlate), não como
+    regex solto dentro do FormRequest. Ver task-13: isso é o que
+    permite testar todos os formatos válidos/inválidos como teste
+    unitário, sem precisar montar uma requisição HTTP pra cada caso.
+
+Sem limite de quantos veículos um assinante pode cadastrar na v1 (ex:
+família com 2 carros usando o mesmo plano) — decisão assumida, revisar
+se algum dia fizer sentido limitar por plano (plans ganharia um
+max_vehicles nullable, mesmo padrão de outros limites opcionais já
+usados no projeto).
+
+
+3. INTEGRAÇÃO COM O RESGATE DE LAVAGEM (AJUSTE NA TASK-8)
+------------------------------------------------------------------
+Passo 1 da task-8 (escolher o lava-rápido) passa a ter um passo antes:
+
+  Passo 0 — Escolher o veículo:
+    - Se o assinante não tem nenhum veículo ativo cadastrado, é
+      redirecionado pra /veiculos/criar antes de poder prosseguir
+      (mensagem: "cadastre um veículo antes de resgatar uma lavagem").
+    - Se tem 1 só, pode pular a escolha (já vem selecionado).
+    - Se tem mais de 1, escolhe qual veículo vai ser lavado.
+
+  Passo 3 da task-8 (gerar o código) passa a gravar também
+  wash_redemptions.vehicle_id = veículo escolhido.
+
+Tela de confirmação do funcionário (task-8, passo 4) passa a mostrar
+placa + marca/modelo/cor do veículo junto do código — ajuda o
+funcionário a confirmar visualmente que é o carro certo antes de
+aceitar o código (reduz erro de confirmar o carro errado, que hoje só
+seria pego depois via cancellation_request).
+
+
+4. PAINEL DO ASSINANTE — HISTÓRICO POR VEÍCULO
+------------------------------------------------------
+Na tela "Meus veículos", cada veículo pode expandir/linkar pro seu
+próprio histórico de lavagens (wash_redemptions.vehicle_id = esse
+veículo) — útil se o assinante tiver mais de um carro e quiser ver
+separado.
+
+
+5. ROTAS (RESUMO)
+-----------------------
+Assinante (auth):
+  GET  /veiculos
+  GET  /veiculos/criar
+  POST /veiculos
+  GET  /veiculos/{vehicle}/editar
+  PUT  /veiculos/{vehicle}
+  DELETE /veiculos/{vehicle}          (soft delete)
+  GET  /veiculos/{vehicle}/lavagens   (histórico filtrado por veículo)
+
+
+6. NOTIFICAÇÕES
+--------------------
+Não é necessário e-mail pra CRUD de veículo — é uma ação simples de
+perfil, sem contraparte esperando confirmação.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(vehicles): migrations de vehicles e vehicle_id em wash_redemptions"
+  2. "feat(vehicles): CRUD de veículos do assinante"
+  3. "feat(vehicles): validação de placa via BrazilianLicensePlate Rule + testes unitários"
+  4. "feat(wash): integra escolha de veículo ao fluxo de resgate (task-8)"
+  5. "feat(wash): exibe dados do veículo na tela de confirmação do funcionário"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada — esta task encaixa-se depois da task-8 (resgate
+de lavagem já precisa existir pra integrar a escolha de veículo nela).

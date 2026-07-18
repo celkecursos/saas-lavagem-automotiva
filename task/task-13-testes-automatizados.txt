@@ -1,0 +1,441 @@
+TASK 13 - Testes automatizados (PHPUnit/Pest)
+========================================================
+
+OBJETIVO
+--------
+Cobrir com testes automatizados as regras de NEGÓCIO de maior risco
+desenhadas nas demais tasks deste projeto (schema/domínio nas tasks 3
+em diante) — não o CRUD trivial que o próprio Laravel já garante. Usar Pest (sintaxe padrão do Laravel 13, roda por cima do
+PHPUnit), tudo executado via Sail, sem nada instalado fora do Docker.
+
+Esta task NÃO é "escrever todos os testes só no final do projeto" — a
+recomendação (seção 4) é escrever e rodar os testes de cada módulo
+JUNTO da task correspondente. Este documento serve de referência da
+estratégia e de checklist do que precisa estar coberto até o fim do
+MVP.
+
+
+1. FERRAMENTAS E CONFIGURAÇÃO
+------------------------------------
+- Pest já vem por padrão no scaffold do Laravel 13 (confirmar em
+  composer.json: pestphp/pest, pestphp/pest-plugin-laravel).
+- Banco de testes dedicado, nunca o de desenvolvimento/produção —
+  mesma lição já conhecida no ecossistema Celke: RefreshDatabase apaga
+  TUDO a cada teste. Configurar .env.testing com DB_DATABASE próprio
+  (ex: celke_wash_club_test) via mysql do Sail — evitar sqlite
+  in-memory aqui, porque o schema usa recursos que precisam se
+  comportar igual ao MySQL real (JSON/encrypted em payment_gateways,
+  enums, unique compostos) e sqlite diverge em detalhes desses casos.
+- Rodar com: ./vendor/bin/sail artisan test  ou  ./vendor/bin/sail pest
+- Criar factories (Model::factory()) pra todos os models envolvidos:
+  User, Plan, PlanFeature, PaymentMethodToken, Subscription,
+  SubscriptionCycle, CarWash,
+  CarWashUser, CarWashInvitation, CarWashProductSubscription, Vehicle,
+  PayoutPlan, WashRedemption, CarWashRating, CancellationRequest,
+  PaymentGateway, PaymentGatewayType, Order, Payout, PayoutItem,
+  ParkingLot, ParkingRate, ParkingSession, ParkingBillingSettings,
+  ParkingBillingCharge, ReferralReward, Achievement, UserAchievement,
+  LoyaltyRedemption, LoyaltyRedemptionClaim, OrderRefundRequest,
+  RefundSetting.
+
+
+2. ESTRATÉGIA POR MÓDULO
+------------------------------
+
+2.1 Pagamentos (task-4)
+  - PaymentGatewayFactory::make() lança PaymentGatewayNotConfiguredException
+    quando zero gateways ativos.
+  - Dois gateways ativos ao mesmo tempo (corrida): resolve pro de
+    updated_at mais recente, sem derrubar o checkout.
+  - credentials sai de fato criptografado no banco (não aparece texto
+    puro numa query direta).
+  - Webhook com assinatura inválida: rejeitado (401), Order continua
+    'pending'.
+  - Webhook válido: Order vira 'paid', paid_at preenchido.
+  - Reenviar o MESMO webhook (mesmo external_reference+event_type) não
+    duplica nada — testar idempotência de verdade, não só o unique
+    constraint isolado.
+
+2.2 Onboarding do lava-rápido (task-5)
+  - Cadastro cria car_wash com status='pending'.
+  - CNPJ ou e-mail duplicado é rejeitado na validação.
+  - approve(): status->'approved', approved_at/approved_by gravados.
+  - reject(): exige rejection_reason (falha sem o motivo).
+  - Ativar produto com car_washes.status != 'approved' é bloqueado.
+  - Ativar 'estacionamento' é imediato (self-service, sem aprovação).
+  - Solicitar 'clube_lavagem' sem escolher um payout_plan é bloqueado;
+    escolhendo, entra como status='pending' (não 'active' direto).
+  - Admin aprova a solicitação -> status='active', approved_by gravado;
+    admin rejeita -> status='canceled'.
+  - Um usuário com car_wash_users em 2 car_washes diferentes consegue
+    trocar de contexto (seletor) e cada ação /painel/* respeita o
+    car_wash certo, nunca vaza dado do outro.
+  - O mesmo usuário sendo funcionário de um car_wash E tendo uma
+    subscription ativa simultaneamente não gera nenhum conflito (users.role
+    não bloqueia mais isso — ver task-3).
+  - Convidar um e-mail que já é de um user existente vincula direto em
+    car_wash_users (role='employee'), sem criar car_wash_invitations.
+  - Convidar um e-mail inexistente cria car_wash_invitations com token
+    único e expires_at; aceitar o convite cria o user (role='user') e o
+    vínculo em car_wash_users; convite expirado não pode mais ser
+    aceito.
+
+2.3 Onboarding e ciclo do assinante (task-7)
+  - subscriptions nasce 'incomplete' (renomeado de 'trialing') e só vira
+    'active' depois do webhook 'paid' (nunca antes).
+  - Sem gateway ativo no momento do checkout: nenhum order/subscription
+    órfã é criado, e a tela de erro amigável aparece (não erro 500).
+  - GET /planos/{plan}/checkout renderiza o formulário e inclui o
+    script do SDK do PagBank; a chave PÚBLICA do gateway ativo aparece
+    na view, o token/segredo da API NUNCA aparece no HTML renderizado
+    (assertDontSee no valor secreto).
+  - 1º pagamento (recurring_type='initial') com sucesso cria
+    payment_method_tokens vinculado ao gateway ativo no momento.
+  - subscriptions:renew cria order 'subsequent' e chama
+    chargeSavedMethod() SEM passar por createCheckout — testar que o
+    método certo é chamado, não o de checkout.
+  - Renovação aprovada gera subscription_cycles novo com quota_used=0.
+  - plans.rollover_quota=true soma o saldo não usado do ciclo anterior;
+    =false zera.
+  - Falha de renovação -> 'past_due' -> 'canceled' automático após a
+    carência (scheduler).
+  - Assinante sem payment_method_tokens pro gateway ATUALMENTE ativo
+    (ex: token era de um gateway que foi desativado) é tratado como
+    falha de renovação sem sequer chamar chargeSavedMethod().
+  - Troca de plano só entra em vigor no ciclo seguinte
+    (pending_plan_id), nunca no ciclo corrente.
+  - /planos exibe só plan_features com active=true do plano, ordenadas
+    por sort_order (criar 3 features fora de ordem e confirmar que a
+    listagem respeita sort_order, não a ordem de criação).
+  - plan_features com active=false NÃO aparece em /planos, mesmo que o
+    plano esteja ativo.
+  - Plano sem nenhuma plan_feature ativa renderiza a tela sem erro e
+    sem nenhum placeholder de "sem vantagens" (assert que a string não
+    aparece no HTML).
+
+2.4 Resgate de lavagem (task-8) e veículos (task-15)
+  - Cadastrar veículo com placa em formato inválido é rejeitado; nos
+    dois formatos válidos (antigo e Mercosul) é aceito.
+  - Placa já cadastrada por OUTRO usuário é rejeitada; pelo mesmo
+    usuário, mensagem de duplicidade.
+  - Assinante sem nenhum veículo ativo é bloqueado/redirecionado antes
+    de conseguir gerar um código de resgate.
+  - Assinante com 1 veículo só: gera o código sem precisar escolher.
+  - Assinante com 2+ veículos: precisa escolher, e o wash_redemptions
+    criado grava o vehicle_id correto (não o primeiro por padrão).
+  - Remover (soft delete) um veículo não quebra o histórico de
+    wash_redemptions antigos que apontam pra ele.
+
+  (unit) A validação de formato de placa (antigo ABC1234 e Mercosul
+  ABC1D23) deve morar numa Rule própria (ex:
+  App\Rules\BrazilianLicensePlate) e ser testada isolada — uma tabela
+  de casos válidos/inválidos (maiúscula/minúscula, com espaço, formato
+  antigo, Mercosul, string vazia, caracteres especiais) rodando direto
+  contra a Rule, sem precisar montar request HTTP nem tocar o banco. O
+  teste de Feature (cadastro completo) continua existindo, mas só
+  precisa cobrir 1 caso válido e 1 inválido pra confirmar que a Rule
+  está mesmo plugada no FormRequest — a variação de formatos fica toda
+  no teste unitário.
+
+  - Gerar código NÃO debita quota_used (permanece igual até confirmar).
+  - Confirmar com código certo + car_wash correto debita exatamente 1.
+  - Código de um lava-rápido não pode ser confirmado por outro
+    car_wash_user.
+  - Código expirado (code_expires_at no passado) não é mais aceito.
+  - max_redemptions_per_day_per_car_wash é respeitado quando definido.
+  - Sem cota disponível (quota_used >= quota_total), pedido de novo
+    código é bloqueado.
+  - Avaliar uma lavagem confirmada cria car_wash_ratings e recalcula
+    car_washes.satisfaction_score corretamente (média).
+  - Avaliar a MESMA lavagem duas vezes é rejeitado (unique
+    wash_redemption_id em car_wash_ratings) — a UI deve tratar isso como
+    "editar a avaliação existente", não criar duplicata.
+  - Solicitar cancelamento de uma lavagem 'completed' cria
+    cancellation_request 'pending' e NÃO altera nada na wash_redemption
+    até o admin decidir.
+
+2.5 Repasse financeiro (task-9)
+  - payouts:generate agrupa corretamente as wash_redemptions
+    'completed' sem payout_item_id, por car_wash.
+  - Rodar o comando 2x seguidas sem novas lavagens NÃO gera payout
+    duplicado nem vazio (idempotência real, não só teórica).
+  - amount_cents de cada payout_item = base_price_cents_snapshot ×
+    percentual correto conforme satisfaction_score do car_wash no
+    momento da geração (testar as 4 faixas: null, <70, 70-90, >90).
+  - payouts.total_amount_cents bate exatamente com a soma dos
+    amount_cents dos payout_items do lote.
+  - Marcar como pago exige referência e fica registrado em audits.
+  - Aprovar uma cancellation_request de uma lavagem que AINDA NÃO
+    entrou em payout: some do próximo payouts:generate.
+  - Aprovar uma cancellation_request de uma lavagem que JÁ está num
+    payout 'pending': remove o payout_item e recalcula
+    total_amount_cents.
+  - Aprovar ativação de car_wash_product_subscriptions
+    (product='clube_lavagem'): status vira 'active' só depois da ação
+    do admin, nunca antes.
+
+2.6 Estacionamento (task-10)
+  - Entrada bloqueada quando não há vaga livre (total_spots atingido).
+  - Cálculo de amount_charged_cents respeita tolerance_minutes e o
+    unit da tarifa (hour/day/fraction) — testar casos de borda (exatos
+    no limite da tolerância, fração incompleta).
+  - Fechar uma sessão já fechada é rejeitado.
+  - Solicitar cancelamento de uma sessão 'closed' cria
+    cancellation_request; aprovar marca a sessão 'canceled' sem
+    movimentar nenhum valor de repasse (não há repasse no
+    estacionamento).
+  - parking-billing:evaluate: wash_count >= total_spots_snapshot gera
+    parking_billing_charges com status='free', sem order.
+  - Caso de fronteira: wash_count EXATAMENTE IGUAL a total_spots_snapshot
+    também é is_free=true (a regra é >=, não >  — testar o limite exato,
+    não só os casos "bem acima"/"bem abaixo").
+  - wash_count < total_spots_snapshot gera charge 'pending' com
+    fee_amount_cents = soma × fee_percentage, e cria o order
+    correspondente.
+  - Webhook 'paid' do order de uma parking_billing_charge 'pending'
+    marca a charge como 'paid' (espelha o order) — testar esse segundo
+    passo, não só a geração da cobrança.
+  - parking_sessions_count muito acima do plausível pra
+    total_spots_snapshot marca flagged_for_review=true (testar o
+    limite exato da fórmula: total_spots × max_turns_per_day_per_spot
+    × dias).
+  - Rodar o comando 2x no mesmo período não duplica
+    parking_billing_charges.
+
+2.6.1 Layout do painel (task-14)
+  - Sidebar do lava-rápido só mostra "Lavagens"/"Repasses" quando
+    'clube_lavagem' está active, e só "Estacionamento"/"Tarifas" quando
+    'estacionamento' está active — testar as 4 combinações (nenhum,
+    só um, só outro, os dois).
+  - Item "Equipe" só aparece pra quem é 'owner' em car_wash_users
+    daquele car_wash, não pra 'employee'.
+  - Sidebar do admin só mostra cada item se o admin tiver a permission
+    correspondente (reaproveita o mesmo teste de permissão da seção 2.7,
+    aplicado à visibilidade do menu, não só ao acesso da rota).
+  - car_washes.status != 'approved': dashboard do lava-rápido renderiza
+    só o banner de status, nenhum card de produto.
+  - Item de menu cuja rota ainda não está registrada (Route::has()
+    falso) não aparece e NÃO derruba a página com
+    RouteNotFoundException — testar isso especificamente simulando uma
+    rota inexistente, já que essa é a proteção que permite a task-14
+    rodar antes das tasks 4/5/9/10/11 sem quebrar (ver nota de ordem no
+    topo da task-14).
+
+  (unit) Extrair a regra de "quais itens de menu aparecem" pra uma
+  classe simples sem dependência de HTTP/View — ex:
+  App\Support\CarWashPanelMenu::visibleItemsFor(array $activeProducts,
+  string $roleInCarWash): array — e testar ela isolada, sem
+  actingAs/get. As 4 combinações de produto ativo + owner/employee
+  viram um teste unitário rápido (sem banco), em vez de 8 requisições
+  HTTP completas só pra checar visibilidade de menu. O teste de
+  Feature (acima) continua existindo, mas só pra confirmar que a VIEW
+  realmente usa essa classe corretamente — não pra testar a regra em
+  si de novo.
+
+2.6.2 Gerenciador de permissões e seed (task-23)
+  - Super Admin passa em QUALQUER permission (Gate::before), mesmo sem
+    nenhuma linha em role_has_permissions pra ele.
+  - Acessar role-permissions.index pro papel 'Super Admin' é bloqueado
+    (não há o que atribuir).
+  - Toggle de uma permission pro papel 'Administrador' reflete na hora
+    (dar -> consegue acessar a rota protegida; revogar -> 403).
+  - Seed cria os 4 usuários com e-mail/senha certos e cada um com o
+    papel/vínculo esperado (cesar=Super Admin, kelly=Administrador,
+    jessica=owner de um car_wash com estacionamento ativo,
+    gabrielly=subscription ativa).
+  - Rodar o seeder 2x não duplica papéis/permissions (updateOrCreate
+    por name+guard_name).
+
+2.7 Painel do admin (task-11)
+  - Admin sem a permission correspondente (spatie/laravel-permission)
+    toma 403 na ação protegida (ex: sem "payouts.mark-paid" não
+    consegue marcar payout como pago, mesmo autenticado como admin).
+  - Admin cria/edita/reordena/desativa uma plan_feature dentro de
+    payment-plans.edit e o resultado aparece corretamente em /planos
+    na próxima requisição (sem precisar de cache/limpar nada).
+  - Editar plan_features NÃO gera registro em audits (é descritivo,
+    não é Auditable — confirmar que a tabela audits continua vazia
+    pra esse model, diferente de editar price_cents do mesmo plano,
+    que DEVE gerar auditoria).
+
+2.7.1 Gestão de usuários pelo admin (task-22)
+  - Buscar por nome/e-mail/CPF/telefone retorna o usuário certo mesmo
+    sem ter nenhuma subscription (ex: só funcionário de lava-rápido).
+  - users.show agrega corretamente dados de tabelas de outras tasks
+    (orders do usuário, wash_redemptions via subscription_cycles,
+    vehicles, referral_rewards como indicador E indicado,
+    achievements/pontos) — cada bloco só do usuário certo, nunca
+    vazando dado de outro.
+  - Suspender conta bloqueia login imediatamente, mesmo com sessão já
+    ativa (não só no próximo login).
+  - Suspender sem informar suspension_reason é rejeitado.
+  - Reativar limpa suspended_at e suspension_reason.
+  - Suspender/reativar gera registro em audits.
+
+2.8 Auditoria (task-3, seção 5)
+  - Mudança de status em car_washes gera registro em audits com
+    old_values/new_values corretos.
+  - Trocar o gateway de pagamento ativo gera registro de auditoria.
+
+2.8.1 Reembolso e chargeback (task-21)
+  - Solicitar reembolso self-service dentro dos 7 dias é permitido;
+    fora da janela (e sem extended_self_service_enabled) é bloqueado.
+  - Com extended_self_service_enabled=true e dentro de
+    until_days: self-service continua permitido depois do dia 7.
+  - gateway->refund() retornando true: order_refund_requests vira
+    'processed', order.status='refunded', subscription cancelada
+    IMEDIATAMENTE (não espera current_period_end).
+  - gateway->refund() retornando false: fica 'failed_manual' até o
+    admin marcar processado manualmente — order só vira 'refunded'
+    nesse momento, não antes.
+  - Chargeback via webhook (sem nenhuma order_refund_requests
+    envolvida): order.status='chargeback', subscription cancelada
+    imediatamente, notificação disparada pro admin.
+  - Reembolso/chargeback de uma subscription NÃO desfaz
+    wash_redemptions já 'completed' nem payout_items já gerados
+    daquele ciclo (limitação documentada — testar que nada muda
+    nessas tabelas).
+  - Segunda solicitação de reembolso pro MESMO order já reembolsado é
+    rejeitada.
+
+2.9 Programa de indicação (task-16)
+  - Cadastrar com referral_code válido grava referred_by_user_id e cria
+    referral_rewards 'pending'.
+  - Código inválido não bloqueia o cadastro, só não cria o vínculo.
+  - Autoindicação (código do próprio e-mail que está se cadastrando) é
+    rejeitada.
+  - subscription do indicado virar 'active' pela 1ª vez muda a reward
+    pra 'qualified' (renovações seguintes do MESMO indicado não geram
+    nova reward — unique em referred_user_id já garante isso).
+  - Criar um subscription_cycles novo pro indicador com reward
+    'qualified' pendente soma +1 em quota_total e marca 'granted' com
+    o cycle certo.
+  - Reward já 'granted' não é considerada de novo em ciclos futuros do
+    mesmo indicador (idempotência).
+
+2.9.1 Fidelidade e gamificação (task-20)
+  - Confirmar a 1ª wash_redemption do usuário desbloqueia 'first_wash'
+    (user_achievements criado + pontos lançados no ledger).
+  - Confirmar a mesma conquista de novo (ex: 11ª lavagem depois de já
+    ter '10_washes') NÃO desbloqueia duplicado (unique
+    user_id+achievement_id).
+  - '3_referrals' só desbloqueia quando a 3ª referral_reward vira
+    'granted' (não 'qualified' — testar a fronteira entre os dois
+    status).
+  - Saldo de pontos (SUM do ledger) bate exatamente com as conquistas
+    desbloqueadas menos os resgates feitos.
+  - Resgatar sem saldo suficiente é bloqueado (não permite ficar
+    negativo).
+  - Resgatar reward_type='free_wash' soma +1 em quota_total do ciclo
+    ATUAL (mesmo método reusado da task-16 — testar que é literalmente
+    o mesmo caminho de código, não uma cópia).
+  - Resgatar reward_type='discount_next_renewal' grava
+    pending_renewal_discount_percent e ele é aplicado (e zerado) na
+    PRÓXIMA renovação, não na atual.
+  - points_spent em loyalty_redemption_claims fica congelado mesmo se
+    o admin mudar points_cost depois do resgate.
+  - Editar loyalty_redemptions.points_cost gera registro em audits.
+
+2.9.2 Site institucional e SEO (task-12)
+  - GET /robots.txt responde 200 e contém "Disallow: /admin",
+    "Disallow: /painel" e o bloqueio dos bots de IA (GPTBot/ClaudeBot/
+    CCBot/Bytespider) — teste simples, mas barato e evita regressão se
+    alguém reescrever o arquivo sem querer.
+  - GET /sitemap.xml responde 200 e inclui a home e /planos.
+
+2.10 Ranking público (task-17)
+  - Lava-rápido com menos avaliações que o mínimo configurado
+    (config('wash-club.min_ratings_for_ranking')) não aparece na lista.
+  - Avaliação de MÊS ANTERIOR não entra no cálculo do mês corrente.
+  - Lava-rápido sem 'clube_lavagem' active não aparece mesmo com notas
+    altas.
+  - Ordenação desc por média correta, respeitando o LIMIT 10.
+
+2.11 Toggle dark/light mode (task-18)
+  - Não é necessário teste automatizado de backend aqui — é
+    comportamento 100% client-side (localStorage + Alpine.js), fora do
+    alcance do Pest/PHPUnit sem um framework de teste de browser
+    (Cypress/Playwright), que está fora do escopo desta task-13. No
+    máximo um teste de Feature simples confirmando que o botão está
+    presente no HTML renderizado do layout.
+
+2.12 Sino de notificações (task-19)
+  - Cada evento (ex: novo car_wash pendente) dispara Notification com
+    via() incluindo 'database' (não só 'mail').
+  - unreadNotifications()->count() bate com a quantidade real após
+    disparar N eventos.
+  - Marcar 1 notificação como lida não afeta as outras; "marcar todas"
+    zera o contador.
+  - Notificação de ação administrativa (ex: NewCancellationRequest) só
+    é enviada pra admins que TÊM a permission correspondente
+    (cancellation-requests.approve) — não pra qualquer admin logado.
+
+
+3. TIPOS DE TESTE
+----------------------
+  - Feature tests (maioria): simulam a requisição HTTP completa
+    (actingAs + post/get + assertStatus/assertDatabaseHas) — é o que
+    dá confiança real de que o fluxo funciona ponta a ponta, não só
+    que uma função isolada retorna certo.
+  - Unit tests: só pra lógica isolada sem necessidade de banco/HTTP
+    (ex: cálculo de valor do estacionamento dado duração + tarifa,
+    cálculo de próxima data de renovação).
+  - NÃO escrever teste pra getter/setter trivial do Eloquent nem pra
+    rota que só faz CRUD sem nenhuma regra de negócio por trás —
+    esforço sem retorno.
+
+
+4. QUEM ESCREVE E QUANDO RODA
+------------------------------------
+  - A cada task de implementação (5 em diante) concluída, a IA escreve
+    os testes daquele módulo específico e RODA (sail artisan test)
+    antes de considerar a task concluída — não é uma etapa separada só
+    no fim do projeto.
+  - Esta task-13 é a referência consolidada + checklist do que ainda
+    falta cobrir, caso algum módulo tenha sido implementado sem teste
+    correspondente.
+  - Usar a skill "verify" já disponível no ambiente pra exercitar o
+    fluxo de ponta a ponta depois de qualquer mudança não trivial, além
+    dos testes automatizados em si.
+
+
+5. CI (GITHUB ACTIONS, OPCIONAL)
+--------------------------------------
+.github/workflows/tests.yml rodando sail artisan test a cada push/PR,
+usando o serviço mysql do próprio GitHub Actions (ou subindo o
+docker-compose.yml do projeto). Evita depender só de rodar local antes
+do push — pega regressão mesmo se alguém esquecer de testar antes de
+commitar.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "test: configura Pest e banco de testes dedicado"
+  2. "test(payments): gateway factory e webhook"
+  3. "test(car-wash): onboarding e fila de aprovação"
+  4. "test(subscriber): ciclo de assinatura, renovação e vantagens (plan_features) em /planos"
+  5. "test(wash): cadastro de veículo, resgate de lavagem, avaliação e solicitação de cancelamento"
+  6. "test(payout): geração, percentual por nota e idempotência de repasse"
+  7. "test(parking): entrada/saída e cálculo de tarifa"
+  8. "test(admin): permissões e auditoria"
+  9. "test(referral): qualificação e concessão de bônus por indicação"
+  10. "test(loyalty): desbloqueio de conquistas e resgate de recompensas"
+  11. "test(ranking): mínimo de avaliações e janela do mês corrente"
+  12. "test(notifications): canais, contador e permissão de destinatário"
+  13. "test(refunds): janela self-service, processamento manual e chargeback"
+  14. "test(admin): busca/visão 360° de usuário e suspensão de conta"
+  15. "test(admin): gerenciador de permissões e seed dos 4 usuários de teste"
+  16. "ci: adiciona GitHub Actions rodando os testes"
+
+(na prática, os commits 2-8 tendem a nascer DENTRO do commit da própria
+funcionalidade de cada task, não isolados aqui — esta lista serve mais
+de checklist de cobertura do que de sequência literal de commits novos)
+
+
+PRÓXIMOS PASSOS
+--------------------
+Esta task não tem um "próximo passo" único — ela é atualizada junto de
+CADA task nova que entra no projeto (a seção 2 ganha uma subseção nova
+por módulo). Ver orientacao.txt para o índice completo das tasks e a
+ordem de execução recomendada. Testes de cada módulo devem ser escritos
+junto da implementação correspondente, não deixados todos para o final.

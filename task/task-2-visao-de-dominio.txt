@@ -1,0 +1,132 @@
+TASK 2 - Visão de domínio: Clube de Assinatura + Marketplace de Lava-rápidos
+================================================================================
+
+OBJETIVO
+--------
+Deixar claro o modelo de negócio antes de modelar banco de dados e código,
+para que as próximas tasks (multi-tenancy, banco, autenticação) já nasçam
+alinhadas com a realidade do produto.
+
+
+ATORES DO SISTEMA
+------------------
+1. Assinante (cliente final)
+   - Paga UMA mensalidade para a plataforma (não para um lava-rápido
+     específico).
+   - Com essa assinatura, tem direito a um "passe" com uma cota de
+     lavagens (ex: 4 lavagens/mês) que pode usar em QUALQUER lava-rápido
+     afiliado à rede.
+
+2. Lava-rápido (parceiro / afiliado)
+   - Se cadastra sozinho na plataforma (self-service), preenchendo dados
+     do estabelecimento, endereço, serviços oferecidos etc.
+   - Fica com status "pendente" até um admin da plataforma aprovar.
+   - Depois de aprovado, passa a aparecer para os assinantes como opção
+     de lava-rápido onde a lavagem pode ser resgatada.
+   - Recebe repasse (split) da plataforma por cada lavagem realizada a
+     um assinante do clube.
+   - Pode, independentemente de participar do clube de lavagem, contratar
+     também o módulo de Gerenciador de Estacionamento (ver abaixo) — os
+     dois produtos são contratados/ativados de forma independente.
+
+3. Admin da plataforma
+   - Aprova/rejeita/suspende lava-rápidos.
+   - Gerencia planos de assinatura (valores, cota de lavagens, regras).
+   - Acompanha repasses financeiros aos lava-rápidos.
+   - Tem visão geral de uso, financeiro e operação de toda a rede.
+
+
+PRODUTO 1 - CLUBE DE ASSINATURA (passe único multi-lava-rápido)
+-----------------------------------------------------------------
+Fluxo principal:
+
+  1. Assinante escolhe um Plano (ex: "Plano Mensal 4 lavagens") e paga a
+     mensalidade para a PLATAFORMA (não para o lava-rápido).
+  2. A assinatura gera uma cota de lavagens disponíveis no período
+     (ex: renovada todo mês).
+  3. Assinante escolhe QUALQUER lava-rápido afiliado (aprovado) e agenda
+     ou resgata uma lavagem, consumindo 1 unidade da cota.
+  4. A plataforma registra o atendimento (lavagem realizada) vinculado
+     ao lava-rápido que prestou o serviço.
+  5. Periodicamente (ou por atendimento), a plataforma calcula o repasse
+     devido a cada lava-rápido com base nas lavagens realizadas e faz o
+     split/transferência do valor correspondente.
+
+Entidades principais (nomes provisórios, refinar na task de banco):
+  - plans                (planos de assinatura: nome, valor, cota de
+                           lavagens, periodicidade)
+  - subscriptions         (assinatura ativa do usuário: plano, status,
+                           ciclo atual, data de renovação)
+  - subscription_quota_usages (controle de quanto da cota já foi usado
+                           no ciclo vigente)
+  - car_washes / lavacars (dados do estabelecimento parceiro: nome,
+                           endereço, status de aprovação)
+  - car_wash_affiliations (vínculo do lavacar com o clube de lavagem —
+                           status: pendente/aprovado/suspenso)
+  - wash_redemptions      (registro de cada lavagem resgatada: qual
+                           assinante, qual lavacar, quando, se já foi
+                           incluída em algum repasse)
+  - payouts / repasses    (lote de repasse financeiro a um lava-rápido,
+                           somando as wash_redemptions do período)
+
+Pontos que precisam de decisão técnica mais à frente (não bloqueiam o
+início do projeto, mas vale já anotar):
+  - O que acontece se o assinante não usar toda a cota do mês? Acumula
+    para o mês seguinte ou perde?
+  - Existe limite de uso por lava-rápido (ex: não pode usar 4x no mesmo
+    lava-rápido no mesmo dia) para evitar abuso?
+  - O repasse é automático (split via gateway de pagamento, ex: Stripe
+    Connect / Pagar.me) ou é um valor calculado que a plataforma paga
+    manualmente (ex: transferência bancária mensal)?
+
+
+PRODUTO 2 - GERENCIADOR DE ESTACIONAMENTO (módulo independente)
+------------------------------------------------------------------
+- É um produto separado: um lava-rápido pode contratar SOMENTE este
+  módulo, sem participar do clube de assinatura de lavagem.
+- Serve para lava-rápidos que também têm estacionamento (aluguel de
+  vagas, controle de entrada/saída de veículos, tempo estacionado,
+  cobrança por período).
+- Por ser um produto independente, o modelo de dados dele deve ser
+  desenhado sem depender das tabelas do clube de lavagem — o lava-rápido
+  é a entidade em comum entre os dois produtos, mas a contratação de
+  cada um é independente.
+
+Entidades principais (provisório):
+  - parking_lots          (o estacionamento em si, pertence a um
+                           car_wash/lavacar)
+  - parking_spots         (vagas individuais do estacionamento, se for
+                           necessário controle vaga a vaga)
+  - parking_sessions       (sessão de um veículo: entrada, saída, placa,
+                           valor cobrado)
+  - parking_rates          (tabela de tarifas: por hora, diária, fração)
+
+
+RELAÇÃO ENTRE OS DOIS PRODUTOS
+-------------------------------
+- Entidade em comum: car_wash (o lava-rápido/estabelecimento).
+- Um car_wash pode ter:
+    - só a affiliation do clube de lavagem,
+    - só o módulo de estacionamento,
+    - os dois ao mesmo tempo.
+- Cada produto deve ter sua própria "assinatura de contratação" (o
+  lava-rápido paga pela plataforma, ou é % sobre repasse, a definir),
+  independente da assinatura do consumidor final ao clube.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+Este documento em si já pode virar um commit próprio, guardado dentro
+do projeto (pasta task/ do Laravel, ver task-1, Passo 5):
+
+  git add task/task-2-visao-de-dominio.txt
+  git commit -m "docs: registra visão de domínio (clube de assinatura + estacionamento)"
+
+Sem código de aplicação nesta task — só o registro da decisão de
+negócio, então um único commit é suficiente aqui.
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

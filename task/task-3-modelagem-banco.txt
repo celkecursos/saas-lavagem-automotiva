@@ -1,0 +1,739 @@
+TASK 3 - Modelagem do banco de dados
+========================================
+
+OBJETIVO
+--------
+Traduzir o modelo de domínio da task-2 (clube de assinatura multi-lava-rápido
++ módulo independente de estacionamento) em tabelas concretas, prontas para
+virar migrations do Laravel.
+
+Convenção: nomes de tabela em inglês/snake_case (padrão Laravel), valores
+monetários sempre em centavos (INT), tudo com timestamps (created_at,
+updated_at) e soft deletes onde fizer sentido remover sem apagar histórico.
+
+
+1. USUÁRIOS E ACESSO
+------------------------
+
+users
+  id
+  name
+  email                 (unique)
+  email_verified_at
+  password
+  phone
+  cpf                    (unique, nullable — nem todo usuário precisa ter)
+  role                   enum: 'user', 'admin'
+                         (só distingue staff da plataforma do resto —
+                         ver observação abaixo sobre por que NÃO existe
+                         'assinante'/'lavacar' como valores separados)
+  suspended_at           timestamp, nullable (conta suspensa pelo admin
+                         — bloqueia login independente de qualquer
+                         outro status; ver task-22)
+  suspension_reason      text, nullable (preenchido só quando
+                         suspended_at não é nulo)
+  created_at / updated_at
+  deleted_at             (soft delete)
+
+Observação (revisão 2026-07-16): a v1 deste documento tinha
+role='assinante'/'lavacar'/'admin', mas isso impedia uma mesma pessoa de
+ser as duas coisas ao mesmo tempo — cenário real e esperado (ex: um
+funcionário de lava-rápido que viaja e quer usar o clube de lavagem em
+outra cidade, num lava-rápido afiliado diferente do seu). Corrigido:
+'role' só existe pra separar staff da plataforma ('admin') do resto
+('user'). As capacidades de "lava-rápido" e "assinante" NÃO vêm do
+role, vêm das relações:
+  - acesso ao painel do lava-rápido  -> ter pelo menos 1 linha em
+    car_wash_users
+  - acesso à área de assinante       -> ter pelo menos 1 subscriptions
+    (mesmo que 'canceled' — histórico ainda é visível)
+Um mesmo user pode ter as duas coisas simultaneamente sem conflito.
+
+Usar Laravel Breeze/Fortify padrão para autenticação (login, registro,
+recuperação de senha, verificação de e-mail).
+
+car_wash_users   (pivot: quem administra qual lava-rápido)
+  id
+  car_wash_id            (FK -> car_washes)
+  user_id                (FK -> users)
+  role                   enum: 'owner', 'employee'
+  created_at / updated_at
+
+  unique(car_wash_id, user_id)
+
+car_wash_invitations   (convite de equipe — promovida aqui da task-5
+                        pra manter a task-3 como fonte única do schema)
+  id
+  car_wash_id            (FK -> car_washes)
+  email
+  token                  (unique)
+  expires_at
+  accepted_at            (nullable)
+  created_at / updated_at
+
+
+2. LAVA-RÁPIDOS (ESTABELECIMENTOS PARCEIROS)
+-------------------------------------------------
+
+car_washes
+  id
+  name
+  slug                   (unique)
+  document               (CNPJ/CPF do responsável, unique)
+  phone
+  email
+  address_line
+  city
+  state
+  zip_code
+  latitude / longitude   (nullable — útil pra busca "lava-rápido mais perto")
+  status                 enum: 'pending', 'approved', 'rejected', 'suspended'
+                         (status GERAL do cadastro do estabelecimento,
+                         independente de qual produto ele contrata)
+  approved_at
+  approved_by            (FK -> users, nullable — qual admin aprovou)
+  rejection_reason       text, nullable (preenchido só quando status =
+                         'rejected'; ver task-5)
+  satisfaction_score     decimal(5,2), nullable (média das notas de
+                         car_wash_ratings, 0-100; nullable = ainda sem
+                         nenhuma avaliação; recalculada a cada nova
+                         avaliação, usada no cálculo do repasse — ver
+                         task-9)
+  created_at / updated_at
+  deleted_at
+
+car_wash_product_subscriptions
+  (contratação de cada PRODUTO pelo lava-rápido — clube de lavagem e
+  estacionamento são independentes entre si, mas ambos pertencem a um
+  car_wash)
+  id
+  car_wash_id            (FK -> car_washes)
+  product                enum: 'clube_lavagem', 'estacionamento'
+  status                 enum: 'pending', 'active', 'suspended', 'canceled'
+                         (ver task-5, seção 5, sobre a diferença de
+                         fluxo entre 'clube_lavagem' — passa por
+                         aprovação do admin — e 'estacionamento' — 100%
+                         self-service, já nasce 'active')
+  activated_at
+  suspended_at
+  approved_by            (FK -> users, nullable — admin que aprovou a
+                         ativação; só relevante pra product=
+                         'clube_lavagem', ver task-5/task-9)
+  payout_plan_id         (FK -> payout_plans, nullable — só relevante
+                         quando product='clube_lavagem'. É o plano de
+                         repasse fixo que o lava-rápido escolheu/aceitou
+                         do catálogo do admin; ver seção 3 e task-9.
+                         Sem isso preenchido, o produto não pode virar
+                         'active')
+  created_at / updated_at
+
+  unique(car_wash_id, product)
+
+  Por que não usar só "car_washes.status"? Porque um lava-rápido pode
+  estar aprovado no cadastro geral, mas ter só o módulo de estacionamento
+  ativo e o clube de lavagem ainda pendente (ou nem ter contratado).
+  Esta tabela resolve isso sem misturar os dois conceitos.
+
+
+3. CLUBE DE ASSINATURA (PRODUTO 1)
+---------------------------------------
+
+payout_plans   (catálogo de planos de repasse — gerenciado só pelo admin;
+               o lava-rápido ESCOLHE um da lista, nunca digita um valor
+               livre; ver task-5/task-9 sobre o motivo dessa mudança)
+  id
+  category               string (nome de marketing definido pelo admin,
+                         ex: "Essencial", "Turbo", "Master" — livre,
+                         não é enum fixo no código)
+  level                  int (ex: 1, 2 — "nível" dentro da categoria)
+  label                  string (rótulo exibido, ex: "Essencial Nível 1")
+  base_price_cents       int (valor fixo por lavagem confirmada nesse
+                         plano — este é o valor de referência sobre o
+                         qual o percentual de repasse é aplicado, ver
+                         task-9)
+  active                 boolean, default true
+  created_at / updated_at
+
+  Exemplos (dados de seed, não fixos no schema):
+    Essencial  Nível 1  R$ 20,00
+    Essencial  Nível 2  R$ 30,00
+    Turbo      Nível 1  R$ 40,00
+    Turbo      Nível 2  R$ 50,00
+
+plans
+  id
+  name
+  slug                   (unique)
+  price_cents
+  wash_quota             (quantas lavagens o plano dá por ciclo)
+  quota_period           enum: 'monthly' (deixar enum já pensando em
+                         'weekly'/'yearly' no futuro, mesmo que só
+                         'monthly' seja usado na v1)
+  rollover_quota         boolean, default false
+                         (cota não usada acumula pro próximo ciclo?
+                         decisão em aberto na task-2 — default "não
+                         acumula"; fica configurável por plano)
+  max_redemptions_per_day_per_car_wash   int, nullable
+                         (limite de uso no mesmo lava-rápido no mesmo dia,
+                         para evitar abuso — nullable = sem limite;
+                         decisão em aberto na task-2, já deixamos o campo
+                         pronto)
+  active                 boolean, default true
+  created_at / updated_at
+
+vehicles   (veículos do assinante — independente de qual subscription
+          está ativa no momento, mantém histórico mesmo se cancelar e
+          assinar de novo depois; ver task-15)
+  id
+  user_id                (FK -> users, o assinante dono do veículo)
+  plate                  string, unique (formato antigo ABC1234 ou
+                         Mercosul ABC1D23)
+  brand                  string, nullable
+  model                  string, nullable
+  color                  string, nullable
+  active                 boolean, default true
+  created_at / updated_at
+  deleted_at             (soft delete)
+
+achievements   (catálogo de conquistas de fidelidade — gerenciado pelo
+              admin; ver task-20)
+  id
+  code                   string, unique
+  name                   string
+  description            string
+  icon                   string
+  points_reward          int
+  active                 boolean, default true
+  created_at / updated_at
+
+user_achievements   (conquistas desbloqueadas por cada assinante)
+  id
+  user_id                (FK -> users)
+  achievement_id         (FK -> achievements)
+  unlocked_at
+  created_at / updated_at
+
+  unique(user_id, achievement_id)
+
+loyalty_points_ledger   (livro-razão de pontos de fidelidade — nunca um
+                        campo de saldo único, sempre um lançamento por
+                        evento)
+  id
+  user_id                (FK -> users)
+  points                 int (positivo = ganhou, negativo = gastou)
+  reason                 enum: 'achievement', 'redemption',
+                         'admin_adjustment'
+  reference_type / reference_id   (morphs, nullable — Achievement ou
+                         LoyaltyRedemption)
+  created_at
+
+loyalty_redemptions   (catálogo de recompensas trocáveis por pontos)
+  id
+  name                   string
+  points_cost            int
+  reward_type            enum: 'free_wash', 'discount_next_renewal'
+  active                 boolean, default true
+  created_at / updated_at
+
+loyalty_redemption_claims   (cada resgate individual feito por um
+                            assinante)
+  id
+  user_id                (FK -> users)
+  loyalty_redemption_id  (FK -> loyalty_redemptions)
+  points_spent           int (congelado no momento do resgate)
+  applied_at
+  created_at / updated_at
+
+order_refund_requests   (solicitação de reembolso — assinante ou admin;
+                        chargeback NÃO passa por aqui, ver task-21)
+  id
+  order_id               (FK -> orders)
+  requested_by_user_id   (FK -> users)
+  initiated_by           enum: 'self_service', 'admin'
+  reason                 text
+  status                 enum: 'approved', 'processed', 'failed_manual'
+  requested_at
+  processed_at           (nullable)
+  created_at / updated_at
+
+refund_settings   (singleton — janela estendida de self-service depois
+                  dos 7 dias fixos do CDC; ver task-21)
+  id
+  extended_self_service_enabled     boolean, default false
+  extended_self_service_until_days  int, nullable
+  updated_at
+
+payment_method_tokens   (cartão tokenizado/salvo pra cobrança recorrente
+                        automática — genérico entre gateways, não só
+                        PagSeguro; ver task-4, seção 5)
+  id
+  user_id                (FK -> users)
+  payment_gateway_id     (FK -> payment_gateways — o token só vale pro
+                         gateway que o gerou; trocar o gateway ativo
+                         quebra a renovação automática de quem já
+                         tinha token salvo no gateway antigo, ver
+                         task-7)
+  token                  string, cast "encrypted" (ex: card.id
+                         devolvido pelo PagBank)
+  brand                  string, nullable (ex: "Visa" — só decorativo,
+                         pra exibir "cartão final 1234" no painel)
+  last_four              string, nullable
+  created_at / updated_at
+
+plan_features   (vantagens de marketing exibidas na vitrine de planos —
+                puramente descritivo, não afeta nenhuma regra de
+                negócio; ver task-11/task-12)
+  id
+  plan_id                (FK -> plans)
+  label                  string (ex: "Suporte prioritário", "Desconto em
+                         produtos parceiros")
+  sort_order             int, default 0 (ordem de exibição no card do
+                         plano)
+  active                 boolean, default true (permite esconder uma
+                         vantagem sem apagar o histórico)
+  created_at / updated_at
+
+subscriptions
+  id
+  user_id                (FK -> users, o assinante)
+  plan_id                (FK -> plans)
+  status                 enum: 'incomplete', 'active', 'past_due',
+                         'canceled'
+                         ('incomplete' substitui o antigo 'trialing' —
+                         não existe período de teste gratuito no
+                         produto, o nome antigo confundia; 'incomplete'
+                         = criada mas aguardando confirmação do primeiro
+                         pagamento, ver task-7)
+  current_period_start
+  current_period_end
+  canceled_at
+  pending_plan_id        (FK -> plans, nullable — troca de plano
+                         agendada pra entrar em vigor só na próxima
+                         renovação; ver task-7)
+  pending_renewal_discount_percent   decimal(5,2), nullable (desconto
+                         de fidelidade a aplicar na próxima renovação;
+                         zerado depois de aplicado uma vez, não
+                         acumula; ver task-20)
+  created_at / updated_at
+
+subscription_cycles
+  (um registro por ciclo de cobrança/uso da assinatura — é aqui que
+  controlamos quanto da cota já foi consumido)
+  id
+  subscription_id        (FK -> subscriptions)
+  period_start
+  period_end
+  quota_total             (copiado do plano no momento do ciclo, para não
+                          quebrar histórico se o plano mudar depois)
+  quota_used               default 0
+  created_at / updated_at
+
+wash_redemptions
+  (cada lavagem resgatada por um assinante em um lava-rápido — fluxo de
+  código de confirmação detalhado na task-8)
+  id
+  subscription_cycle_id  (FK -> subscription_cycles)
+  car_wash_id            (FK -> car_washes)
+  redeemed_at            (nullable — só preenchido quando confirmado)
+  confirmation_code      char(6)
+  code_expires_at
+  confirmed_by_user_id   (FK -> users, nullable — funcionário do
+                         lava-rápido que confirmou)
+  vehicle_id             (FK -> vehicles, nullable até a geração do
+                         código; obrigatório a partir da task-15 — qual
+                         veículo do assinante está sendo lavado)
+  status                 enum: 'requested', 'completed', 'expired',
+                         'canceled'
+  base_price_cents_snapshot   int, nullable (copiado de
+                         payout_plans.base_price_cents — via
+                         car_wash_product_subscriptions.payout_plan_id —
+                         no momento em que status vira 'completed'. NÃO
+                         é o valor final do repasse: o percentual pela
+                         nota de satisfação só é aplicado na hora de
+                         gerar o payout, porque a nota pode mudar depois
+                         da lavagem e antes do lote rodar; ver task-9)
+  payout_item_id         (FK -> payout_items, nullable — preenchido quando
+                         entra em algum lote de repasse)
+  created_at / updated_at
+
+car_wash_ratings   (avaliação do assinante sobre o lava-rápido, feita
+                   depois de uma lavagem confirmada — alimenta
+                   car_washes.satisfaction_score, que por sua vez decide
+                   o percentual de repasse; ver task-8/task-9)
+  id
+  wash_redemption_id     (FK -> wash_redemptions, unique — 1 avaliação
+                         por lavagem)
+  car_wash_id            (FK -> car_washes)
+  user_id                (FK -> users, quem avaliou)
+  score                  int (0-100)
+  comment                text, nullable
+  created_at / updated_at
+
+cancellation_requests   (solicitação de cancelamento de uma lavagem JÁ
+                        confirmada — quem confirmou errado não pode
+                        simplesmente desfazer sozinho; pede e o admin
+                        decide. Também usada pra parking_sessions, ver
+                        task-10)
+  id
+  requestable_type / requestable_id   (morphs — WashRedemption ou
+                         ParkingSession)
+  requested_by_user_id   (FK -> users — o assinante ou o funcionário do
+                         lava-rápido/estacionamento que percebeu o erro)
+  reason                 text
+  status                 enum: 'pending', 'approved', 'rejected'
+  resolved_by_user_id    (FK -> users, nullable — admin que decidiu)
+  resolved_at
+  created_at / updated_at
+
+payouts
+  (lote de repasse financeiro para um lava-rápido)
+  id
+  car_wash_id            (FK -> car_washes)
+  period_start
+  period_end
+  total_amount_cents
+  status                 enum: 'pending', 'paid', 'failed'
+  paid_at
+  created_at / updated_at
+
+payout_items
+  id
+  payout_id              (FK -> payouts)
+  wash_redemption_id     (FK -> wash_redemptions)
+  amount_cents
+  created_at / updated_at
+
+
+4. GERENCIADOR DE ESTACIONAMENTO (PRODUTO 2, INDEPENDENTE)
+----------------------------------------------------------------
+
+parking_lots
+  id
+  car_wash_id            (FK -> car_washes)
+  name
+  total_spots
+  created_at / updated_at
+
+parking_spots
+  (opcional: só necessário se o controle for vaga a vaga; se o
+  estacionamento controlar só "quantidade de vagas livres", esta tabela
+  pode ser adiada para uma v2)
+  id
+  parking_lot_id         (FK -> parking_lots)
+  code                    (identificação da vaga, ex: "A12")
+  status                 enum: 'available', 'occupied', 'maintenance'
+  created_at / updated_at
+
+parking_rates
+  id
+  parking_lot_id         (FK -> parking_lots)
+  name
+  unit                    enum: 'hour', 'day', 'fraction'
+  price_cents
+  tolerance_minutes       (minutos de tolerância sem cobrança, ex: 10)
+  active                  boolean, default true
+  created_at / updated_at
+
+parking_sessions
+  id
+  parking_lot_id          (FK -> parking_lots)
+  parking_spot_id        (FK -> parking_spots, nullable se não controlar
+                         vaga a vaga)
+  parking_rate_id        (FK -> parking_rates)
+  plate                  (placa do veículo)
+  entry_at
+  exit_at                (nullable enquanto o veículo está estacionado)
+  amount_charged_cents   (nullable até o fechamento da sessão)
+  payment_method         enum: 'cash', 'card', 'pix', nullable
+                         (preenchido só no fechamento; ver task-10)
+  status                 enum: 'open', 'closed', 'canceled'
+  created_at / updated_at
+
+
+4.1 MONETIZAÇÃO DO ESTACIONAMENTO (resolvido 2026-07-16, ver task-10)
+------------------------------------------------------------------------
+
+parking_billing_settings   (singleton, mesmo padrão de outras
+                           configurações globais do ecossistema —
+                           GabaritoEyeSetting-like)
+  id
+  fee_percentage           decimal(5,2), default 10.00 (% cobrada por
+                           carro estacionado quando o lava-rápido NÃO
+                           se qualifica pro estacionamento gratuito —
+                           ver regra na task-10; referência de mercado:
+                           SpotHero cobra 15-20%, aqui é mais baixo
+                           porque a plataforma não traz o cliente do
+                           estacionamento, só fornece o sistema)
+  max_turns_per_day_per_spot   int, default 6 (usado só no cálculo
+                           antifraude — ver task-10)
+  updated_at
+
+parking_billing_charges   (1 registro por lava-rápido por período —
+                           mesmo raciocínio de "lote" que payouts, só
+                           que na direção contrária: o lava-rápido deve
+                           À plataforma, não o contrário)
+  id
+  car_wash_id              (FK -> car_washes)
+  period_start
+  period_end
+  wash_count               int (lavagens 'completed' do clube nesse
+                           período, snapshot)
+  total_spots_snapshot     int (soma de parking_lots.total_spots
+                           daquele car_wash nesse período)
+  parking_sessions_count   int (sessões 'closed' nesse período)
+  is_free                  boolean (wash_count >= total_spots_snapshot?)
+  fee_percentage_applied   decimal(5,2), nullable (só quando is_free=false)
+  fee_amount_cents         int, nullable (só quando is_free=false)
+  order_id                 (FK -> orders, nullable — só criado quando
+                           is_free=false, pra cobrar via
+                           PaymentGatewayFactory, ver task-4)
+  flagged_for_review       boolean, default false (heurística
+                           antifraude disparada — ver task-10)
+  status                   enum: 'free', 'pending', 'paid', 'failed'
+  created_at / updated_at
+
+Em orders (task-4), payable_type agora também pode apontar pra
+ParkingBillingCharge, além de Subscription — reaproveita o mesmo
+checkout/webhook já construído na task-4, sem tabela de pagamento nova.
+
+
+5. AUDITORIA (owen-it/laravel-auditing)
+--------------------------------------------
+
+Instalar o pacote owen-it/laravel-auditing (via Docker/Sail, sem nada
+local):
+
+  ./vendor/bin/sail composer require owen-it/laravel-auditing
+
+  ./vendor/bin/sail artisan vendor:publish --provider="OwenIt\Auditing\AuditingServiceProvider" --tag="config"
+
+  ./vendor/bin/sail artisan vendor:publish --provider="OwenIt\Auditing\AuditingServiceProvider" --tag="migrations"
+
+  ./vendor/bin/sail artisan migrate
+
+Isso cria a tabela "audits", que registra quem alterou o quê, quando, e
+os valores antigo/novo (old_values / new_values) para qualquer model que
+implementar o contrato OwenIt\Auditing\Contracts\Auditable + a trait
+OwenIt\Auditing\Auditable.
+
+Quais models do SaaS precisam ser Auditable (ações sensíveis, financeiras
+ou de aprovação — todo lugar em que "quem fez o quê" importa para
+resolver disputa ou auditoria financeira):
+
+  - users                              (suspender/reativar uma conta —
+                                       ver task-22)
+  - car_washes                        (mudanças de status: pending ->
+                                       approved/rejected/suspended, e
+                                       quem aprovou)
+  - car_wash_product_subscriptions    (ativação/suspensão/cancelamento
+                                       de cada produto contratado)
+  - plans                             (mudança de preço/cota de um plano
+                                       já em uso por assinantes ativos)
+  - subscriptions                     (mudança de status: cancelamento,
+                                       downgrade/upgrade de plano)
+  - wash_redemptions                  (cancelamento de uma lavagem já
+                                       resgatada)
+  - payouts / payout_items            (todo o ciclo de repasse
+                                       financeiro — obrigatório para
+                                       auditoria contábil)
+  - payout_plans                      (catálogo de repasse — mudar um
+                                       valor afeta o cálculo de todos os
+                                       lava-rápidos que escolheram aquele
+                                       plano)
+  - cancellation_requests             (quem pediu, quem aprovou/rejeitou
+                                       o cancelamento de uma lavagem/
+                                       sessão já confirmada)
+  - parking_rates                     (mudança de tarifa)
+  - parking_sessions                  (correção manual de entrada/saída
+                                       ou valor cobrado)
+  - parking_billing_settings          (mudança do percentual cobrado
+                                       afeta todos os lava-rápidos)
+  - parking_billing_charges           (revisão manual de cobrança
+                                       sinalizada pelo antifraude)
+  - loyalty_redemptions                (mudar points_cost afeta quanto
+                                       os usuários pagam por uma
+                                       recompensa — mesmo critério de
+                                       payout_plans; ver task-20)
+  - order_refund_requests              (reembolso é dinheiro saindo,
+                                       sempre rastreável; ver task-21)
+  - refund_settings                    (mudar a janela estendida de
+                                       self-service afeta todo mundo)
+
+Não é necessário auditar tabelas puramente operacionais e de alto volume
+sem valor de disputa (ex: subscription_cycles é recalculado
+automaticamente e não sofre edição manual).
+
+Cada model auditável precisa apenas:
+
+  use OwenIt\Auditing\Contracts\Auditable;
+
+  class CarWash extends Model implements Auditable
+  {
+      use \OwenIt\Auditing\Auditable;
+      ...
+  }
+
+Isso será feito junto com a criação de cada model, nas tasks abaixo que
+mexem em ações de aprovação/cancelamento/financeiro — não é uma task à
+parte, é um requisito a cumprir dentro delas.
+
+
+6. PERMISSÕES (spatie/laravel-permission) — INSTALAÇÃO ANTECIPADA
+------------------------------------------------------------------------
+CORREÇÃO DE ORDEM (2026-07-17): a v1 deste projeto instalava esse
+pacote só na task-11 — mas as tasks 4, 5 e 9 já criam rotas admin com
+`->middleware('permission:...')`, e a task-14 (layout/sidebar) já usa
+`@can(...)` pra decidir o que mostrar. Todas elas rodam ANTES da
+task-11 na ordem de execução (ver orientacao.txt) — se o pacote só
+existisse na task-11, essas rotas/checks quebrariam (middleware
+inexistente) muito antes de chegar lá. Resolvido instalando aqui, junto
+do resto da fundação do banco (mesmo raciocínio de instalar
+owen-it/laravel-auditing nesta task e não numa task futura).
+
+  ./vendor/bin/sail composer require spatie/laravel-permission
+  ./vendor/bin/sail artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider"
+  ./vendor/bin/sail artisan migrate
+
+AppServiceProvider::boot() — bypass total do Super Admin (detalhado na
+task-23, replicando o padrão do projeto adm):
+
+  Gate::before(function ($user, $ability) {
+      return $user->hasRole('Super Admin') ? true : null;
+  });
+
+PermissionSeeder (lista COMPLETA, consolidando o que cada task usa —
+ver task-23 pra o detalhamento de cada uma):
+  car-washes.index / .approve / .reject / .suspend
+  car-wash-product-subscriptions.index / .approve / .reject
+  payout-plans.index / .create / .edit
+  payment-gateways.index / .create / .edit / .activate
+  payment-plans.index / .create / .edit
+  orders.index / .show / .refund
+  order-refund-requests.index / .mark-processed
+  refund-settings.edit
+  users.index / .show / .suspend / .reactivate
+  payouts.index / .mark-paid / .mark-failed
+  cancellation-requests.index / .approve / .reject
+  parking-billing-settings.edit
+  parking-billing-charges.index
+  audits.index
+  roles.index / .create / .edit / .destroy / .update-order
+  permissions.index / .create / .edit / .destroy
+  role-permissions.index / .update
+
+RoleSeeder:
+  Super Admin   (order=1, nenhuma permission explícita — bypass acima)
+  Administrador (todas as permissions acima EXCETO roles.*/
+               permissions.*/role-permissions.* — exclusivas do Super
+               Admin por padrão, ver task-23)
+
+IMPORTANTE: instalar o PACOTE e seedar as PERMISSIONS/ROLES aqui não
+antecipa as TELAS de gerenciar isso (RoleController/PermissionController/
+RolePermissionController) nem o UserSeeder com os 4 usuários de teste —
+isso continua sendo construído na task-23, na posição dela na ordem de
+execução (depois que já existe bastante coisa pra demonstrar). Só a
+FUNDAÇÃO (pacote + Gate::before + nomes de permission já existindo como
+registros no banco) precisa vir cedo, pra middleware/`@can` funcionarem
+desde a task-4 em diante.
+
+
+RELACIONAMENTOS-CHAVE (RESUMO)
+-----------------------------------
+  users 1---N car_wash_users N---1 car_washes
+  car_washes 1---N car_wash_invitations
+  car_washes 1---N car_wash_product_subscriptions N---1 payout_plans
+  plans 1---N plan_features
+  users 1---N user_achievements N---1 achievements
+  users 1---N loyalty_points_ledger
+  users 1---N loyalty_redemption_claims N---1 loyalty_redemptions
+  users 1---N subscriptions N---1 plans
+  orders 1---N order_refund_requests
+  users 1---N vehicles
+  subscriptions 1---N subscription_cycles
+  subscription_cycles 1---N wash_redemptions N---1 car_washes
+  vehicles 1---N wash_redemptions
+  wash_redemptions 1---1 car_wash_ratings
+  wash_redemptions 1---N cancellation_requests (polimórfico, ver
+                                                 parking_sessions também)
+  car_washes 1---N payouts 1---N payout_items 1---1 wash_redemptions
+  car_washes 1---N parking_lots 1---N parking_spots
+  parking_lots 1---N parking_rates
+  parking_lots 1---N parking_sessions N---1 parking_rates
+                                       N---1 parking_spots (opcional)
+
+
+DECISÕES ASSUMIDAS NESTA MODELAGEM (revisar se necessário)
+-----------------------------------------------------------------
+- Cota de lavagem NÃO acumula por padrão entre ciclos (rollover_quota
+  = false), mas o campo já existe no plano para religar isso depois
+  sem mudar schema.
+- Sem limite de uso por lava-rápido/dia por padrão
+  (max_redemptions_per_day_per_car_wash = null), mas o campo já existe.
+- Repasse (payouts) modelado como PROCESSO PRÓPRIO da plataforma (não
+  split automático via gateway) — cálculo de payout roda por lote/período
+  e depois é paga manualmente ou via transferência; se decidir usar split
+  automático (Stripe Connect, Pagar.me Marketplace) depois, as tabelas
+  payouts/payout_items continuam servindo como registro de conciliação.
+- parking_spots é opcional/adiável para v2 caso o controle vaga a vaga
+  não seja necessário no MVP (basta parking_sessions + total_spots do
+  parking_lot para saber ocupação).
+- Repasse do clube de lavagem (revisão 2026-07-16): NÃO é mais um valor
+  livre negociado por lava-rápido. O admin mantém um catálogo
+  (payout_plans) e o lava-rápido escolhe um item desse catálogo ao
+  pedir pra ativar o produto 'clube_lavagem' — a ativação em si passa a
+  exigir aprovação do admin (diferente do 'estacionamento', que continua
+  100% self-service). O valor efetivamente repassado por lavagem é
+  base_price_cents (do payout_plan escolhido) multiplicado por um
+  percentual que depende da nota média do lava-rápido
+  (car_washes.satisfaction_score, alimentada por car_wash_ratings):
+    nota < 70            -> 60%
+    70 <= nota <= 90      -> 70% (padrão)
+    nota > 90             -> 75%
+    sem nenhuma avaliação ainda -> 70% (padrão, até ter dado real)
+  Ver o detalhamento completo do cálculo na task-9.
+- Monetização do estacionamento (RESOLVIDO 2026-07-16): gratuito
+  enquanto o lava-rápido prestar volume de lavagens >= capacidade do
+  estacionamento (wash_count >= total_spots no período); caso
+  contrário, cobra fee_percentage (padrão 10%, configurável) de cada
+  carro estacionado, com verificação antifraude cruzando o volume real
+  de parking_sessions contra a capacidade declarada. Ver task-10 para o
+  detalhamento completo do cálculo e da checagem antifraude.
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+Uma migration/grupo de migrations relacionadas por commit, não tudo de
+uma vez — assim dá pra ver no histórico do Git em que ordem o schema
+foi crescendo:
+
+  1. "feat(db): migrations de usuários e vínculo com lava-rápido"
+     (users, car_wash_users, car_wash_invitations)
+  2. "feat(db): migrations de lava-rápidos e produtos contratados"
+     (car_washes, car_wash_product_subscriptions, payout_plans)
+  3. "feat(db): migrations do clube de assinatura"
+     (plans, plan_features, subscriptions, subscription_cycles,
+     vehicles, wash_redemptions, car_wash_ratings)
+  4. "feat(db): migrations de fidelidade e gamificação"
+     (achievements, user_achievements, loyalty_points_ledger,
+     loyalty_redemptions, loyalty_redemption_claims)
+  5. "feat(db): migrations de repasse financeiro"
+     (payouts, payout_items)
+  6. "feat(db): migration de solicitação de cancelamento"
+     (cancellation_requests)
+  7. "feat(db): migrations do módulo de estacionamento"
+     (parking_lots, parking_spots, parking_rates, parking_sessions,
+     parking_billing_settings, parking_billing_charges)
+  8. "feat(audit): instala e configura owen-it/laravel-auditing"
+     (composer require + publish + migration da tabela audits)
+  9. "feat(admin): instala spatie/laravel-permission, Gate::before e PermissionSeeder/RoleSeeder"
+     (fundação antecipada — telas de gerenciar isso ficam pra task-23)
+
+Cada commit já deve rodar sail artisan migrate:fresh sem erro antes de
+seguir pro próximo, pra garantir que o histórico do Git nunca fica com
+um estado de schema quebrado no meio.
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.
