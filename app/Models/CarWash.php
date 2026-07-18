@@ -38,6 +38,15 @@ class CarWash extends Model implements Auditable
         return $this->hasMany(CarWashInvitation::class);
     }
 
+    /**
+     * Produtos contratados (clube_lavagem / estacionamento) — a
+     * contratação de cada um é independente (task-3, seção 2).
+     */
+    public function productSubscriptions(): HasMany
+    {
+        return $this->hasMany(CarWashProductSubscription::class);
+    }
+
     protected function casts(): array
     {
         return [

@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
+use App\Http\Controllers\Panel\ProductController as PanelProductController;
 use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegisterCarWashController;
@@ -103,6 +104,14 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
         ->name('panel.registration.edit');
     Route::put('/cadastro', [PanelRegistrationController::class, 'update'])
         ->name('panel.registration.update');
+
+    // Meus produtos (task-5, seção 5).
+    Route::get('/produtos', [PanelProductController::class, 'index'])
+        ->name('panel.products.index');
+    Route::post('/produtos/estacionamento/ativar', [PanelProductController::class, 'activateParking'])
+        ->name('panel.products.parking.activate');
+    Route::post('/produtos/estacionamento/pausar', [PanelProductController::class, 'pauseParking'])
+        ->name('panel.products.parking.pause');
 });
 
 require __DIR__.'/auth.php';
