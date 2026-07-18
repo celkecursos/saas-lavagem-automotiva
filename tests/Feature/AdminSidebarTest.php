@@ -30,11 +30,12 @@ test('item de rota nao registrada nao aparece e nao quebra a sidebar', function 
     $user->assignRole('Super Admin');
     $this->actingAs($user);
 
-    // Nenhuma rota das telas de CRUD existe ainda (tasks 4/5/9/10/11) —
-    // a sidebar renderiza sem RouteNotFoundException e sem os itens.
+    // Rotas já registradas aparecem; as das tasks futuras (ex:
+    // audits.index, task-11) não aparecem e NÃO derrubam a página com
+    // RouteNotFoundException — é a proteção Route::has() da task-14.
     $html = renderAdminSidebar();
 
-    expect($html)->not->toContain('Lava-rápidos')
+    expect($html)->toContain('Lava-rápidos')
         ->and($html)->not->toContain('Auditoria');
 });
 
