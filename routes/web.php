@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\Admin\CarWashController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
+use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegisterCarWashController;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +61,18 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/', AdminDashboardController::class)->name('admin.dashboard');
 
+    // Fila de aprovação de lava-rápidos (task-5, seção 4).
+    Route::get('/lava-rapidos', [CarWashController::class, 'index'])
+        ->middleware('permission:car-washes.index')->name('car-washes.index');
+    Route::get('/lava-rapidos/{car_wash}', [CarWashController::class, 'show'])
+        ->middleware('permission:car-washes.index')->name('car-washes.show');
+    Route::post('/lava-rapidos/{car_wash}/aprovar', [CarWashController::class, 'approve'])
+        ->middleware('permission:car-washes.approve')->name('car-washes.approve');
+    Route::post('/lava-rapidos/{car_wash}/rejeitar', [CarWashController::class, 'reject'])
+        ->middleware('permission:car-washes.reject')->name('car-washes.reject');
+    Route::post('/lava-rapidos/{car_wash}/suspender', [CarWashController::class, 'suspend'])
+        ->middleware('permission:car-washes.suspend')->name('car-washes.suspend');
+
     // Gateways de pagamento (task-4, seção 4) — middleware permission
     // em cada rota individualmente (padrão do projeto, ver task-23).
     Route::get('/gateways-pagamento', [PaymentGatewayController::class, 'index'])
@@ -83,6 +97,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
     Route::get('/', PanelDashboardController::class)->name('panel.dashboard');
     Route::post('/trocar-lava-rapido', CarWashSwitchController::class)->name('panel.car-wash.switch');
+
+    // Correção/reenvio de cadastro rejeitado (task-5, seção 3).
+    Route::get('/cadastro/corrigir', [PanelRegistrationController::class, 'edit'])
+        ->name('panel.registration.edit');
+    Route::put('/cadastro', [PanelRegistrationController::class, 'update'])
+        ->name('panel.registration.update');
 });
 
 require __DIR__.'/auth.php';

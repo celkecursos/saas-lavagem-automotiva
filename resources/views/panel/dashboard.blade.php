@@ -19,6 +19,9 @@
                     Motivo: {{ $carWash->rejection_reason }}
                 @endif
             </div>
+            @if (Route::has('panel.registration.edit'))
+                <a href="{{ route('panel.registration.edit') }}" class="btn-primary">Corrigir e reenviar cadastro</a>
+            @endif
         @elseif ($carWash->status === 'suspended')
             <div class="alert-danger">
                 Seu cadastro está <strong>suspenso</strong>. Entre em contato com
