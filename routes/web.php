@@ -5,10 +5,12 @@ use App\Http\Controllers\Admin\CarWashProductSubscriptionController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ProductController as PanelProductController;
 use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
+use App\Http\Controllers\Panel\TeamController as PanelTeamController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegisterCarWashController;
 use Illuminate\Support\Facades\DB;
@@ -128,6 +130,14 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
         ->name('panel.products.club.request');
     Route::post('/produtos/clube-lavagem/pausar', [PanelProductController::class, 'pauseClub'])
         ->name('panel.products.club.pause');
+
+    // Equipe (task-5, seção 6) — owner convida, employee não.
+    Route::get('/equipe', [PanelTeamController::class, 'index'])->name('panel.team.index');
+    Route::post('/equipe/convidar', [PanelTeamController::class, 'invite'])->name('panel.team.invite');
 });
+
+// Aceite público de convite de equipe (task-5, seção 6).
+Route::get('/convites/{token}', [InvitationController::class, 'show'])->name('invitations.show');
+Route::post('/convites/{token}', [InvitationController::class, 'accept'])->name('invitations.accept');
 
 require __DIR__.'/auth.php';
