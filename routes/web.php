@@ -2,12 +2,20 @@
 
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
+use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+// Checkout embedded do clube de assinatura (task-4, seção 5.3). O POST
+// /planos/{plan}/assinar que processa nasce na task-7.
+Route::middleware('auth')->group(function () {
+    Route::get('/planos/{plan}/checkout', [CheckoutController::class, 'show'])
+        ->name('plans.checkout');
 });
 
 // Painel do admin (URLs em /admin, nomes internos em inglês — ver
