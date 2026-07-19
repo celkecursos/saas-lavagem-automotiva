@@ -26,7 +26,9 @@ test('admin cria vantagem e ela aparece na vitrine na proxima requisicao', funct
         'label' => 'Suporte prioritário',
     ])->assertRedirect(route('payment-plans.edit', $plan));
 
-    $feature = PlanFeature::sole();
+    // Escopado ao plano do teste: o PlanSeeder já semeia as vantagens dos
+    // 3 planos da vitrine, então o contador global não serve mais aqui.
+    $feature = $plan->features()->sole();
     expect($feature->label)->toBe('Suporte prioritário')
         ->and($feature->active)->toBeTrue();
 
@@ -86,5 +88,5 @@ test('remover vantagem apaga o registro', function () {
 
     $this->actingAs($admin)->delete(route('payment-plans.features.destroy', [$plan, $feature]));
 
-    expect(PlanFeature::count())->toBe(0);
+    expect($plan->features()->count())->toBe(0);
 });

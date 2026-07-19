@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             PaymentGatewayTypeSeeder::class,
             PayoutPlanSeeder::class,
             AchievementSeeder::class,
+            PlanSeeder::class,
             UserSeeder::class,
         ]);
     }

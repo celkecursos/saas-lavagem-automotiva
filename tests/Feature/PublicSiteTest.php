@@ -4,6 +4,7 @@ use App\Models\CarWash;
 use App\Models\CarWashProductSubscription;
 use App\Models\Plan;
 use App\Models\PlanFeature;
+use Database\Seeders\PlanSeeder;
 
 // Ver task-12, e task-13.
 
@@ -41,6 +42,22 @@ test('plano sem vantagens cadastradas nao mostra secao de vantagens nem placehol
     $response = $this->get('/');
 
     $response->assertOk()->assertDontSee('nenhuma vantagem');
+});
+
+test('seeder publica os 3 planos da vitrine com vantagens e destaca o do meio', function () {
+    $this->seed(PlanSeeder::class);
+
+    $plans = Plan::where('active', true)->orderBy('price_cents')->get();
+
+    expect($plans->pluck('name')->all())->toBe(['Essencial', 'Completo', 'Premium'])
+        ->and($plans->every(fn ($plan) => $plan->features()->count() > 0))->toBeTrue();
+
+    $this->get('/')->assertOk()
+        ->assertSee('Essencial')
+        ->assertSee('Completo')
+        ->assertSee('Premium')
+        // Só o plano do meio ganha o selo de destaque.
+        ->assertSee('Mais vendido');
 });
 
 test('paginas institucionais renderizam', function () {

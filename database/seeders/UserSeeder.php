@@ -96,6 +96,8 @@ class UserSeeder extends Seeder
             ['name' => 'Gabrielly', 'password' => Hash::make(self::PASSWORD), 'role' => 'user', 'email_verified_at' => now()],
         );
 
+        // O plano em si vem do PlanSeeder (roda antes deste); o firstOrCreate
+        // fica só como rede de segurança pra quem roda este seeder isolado.
         $plan = Plan::firstOrCreate(
             ['slug' => 'essencial'],
             [
