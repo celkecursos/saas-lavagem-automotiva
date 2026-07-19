@@ -13,15 +13,22 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * Fluxo de resgate de lavagem pelo assinante (task-8, seções 2 e 6).
- * Seleção de veículo (Passo 0) chega completa na task-15 — vehicle_id
- * já é aceito aqui se enviado, mas ainda não é obrigatório (nullable
- * no schema até lá, ver task-3, seção 3).
+ * Fluxo de resgate de lavagem pelo assinante (task-8, seções 2 e 6;
+ * escolha de veículo — Passo 0 — integrada na task-15, seção 3).
  */
 class WashController extends Controller
 {
-    public function choose(Request $request): View
+    public function choose(Request $request): View|RedirectResponse
     {
+        $vehicles = $request->user()->vehicles()->where('active', true)->get();
+
+        // Passo 0 (task-15): sem nenhum veículo ativo, redireciona pra
+        // cadastrar antes de poder prosseguir.
+        if ($vehicles->isEmpty()) {
+            return redirect()->route('vehicles.create')
+                ->with('error', 'Cadastre um veículo antes de resgatar uma lavagem.');
+        }
+
         // Lava-rápidos aptos a receber resgate: aprovados E com o
         // produto 'clube_lavagem' ativo (task-8, seção 2, passo 1).
         $carWashes = CarWash::query()
@@ -47,7 +54,7 @@ class WashController extends Controller
             fn ($query) => $query->where('user_id', $request->user()->id),
         )->with(['carWash', 'rating'])->latest('created_at')->paginate(10);
 
-        return view('subscriber.wash.choose', compact('carWashes', 'activeRedemption', 'history'));
+        return view('subscriber.wash.choose', compact('carWashes', 'activeRedemption', 'history', 'vehicles'));
     }
 
     public function request(Request $request, CarWash $carWash, WashRedemptionService $service): RedirectResponse
@@ -58,9 +65,24 @@ class WashController extends Controller
             return back()->with('error', 'Você não tem uma assinatura ativa.');
         }
 
-        $vehicle = $request->filled('vehicle_id')
-            ? $request->user()->vehicles()->whereKey($request->input('vehicle_id'))->first()
-            : null;
+        $vehicles = $request->user()->vehicles()->where('active', true)->get();
+
+        if ($vehicles->isEmpty()) {
+            return redirect()->route('vehicles.create')
+                ->with('error', 'Cadastre um veículo antes de resgatar uma lavagem.');
+        }
+
+        // 1 veículo só: pula a escolha. 2+: exige vehicle_id explícito
+        // (task-15, seção 3).
+        if ($vehicles->count() === 1) {
+            $vehicle = $vehicles->first();
+        } else {
+            $vehicle = $vehicles->firstWhere('id', (int) $request->input('vehicle_id'));
+
+            if ($vehicle === null) {
+                return back()->with('error', 'Escolha qual veículo vai ser lavado.');
+            }
+        }
 
         try {
             $service->request($subscription, $carWash, $vehicle);

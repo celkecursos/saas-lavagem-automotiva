@@ -30,9 +30,13 @@ class WashRedemption extends Model implements Auditable
         return $this->belongsTo(CarWash::class);
     }
 
+    /**
+     * withTrashed(): um veículo removido (soft delete, task-15) continua
+     * aparecendo corretamente no histórico de lavagens antigas.
+     */
     public function vehicle(): BelongsTo
     {
-        return $this->belongsTo(Vehicle::class);
+        return $this->belongsTo(Vehicle::class)->withTrashed();
     }
 
     public function confirmedBy(): BelongsTo

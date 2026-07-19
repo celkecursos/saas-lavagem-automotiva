@@ -6,9 +6,13 @@ use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\SubscriptionCycle;
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Models\WashRedemption;
 
-// Ver task-13, seção 2.4, e task-8, seção 2.
+// Ver task-13, seção 2.4, e task-8, seção 2. A partir da task-15, o
+// assinante precisa de ao menos 1 veículo ativo pra gerar código — os
+// testes já criam um por padrão (ver ausência-de-veículo em
+// VehicleWashIntegrationTest.php).
 
 function activeCarWash(): CarWash
 {
@@ -25,6 +29,7 @@ function activeSubscriberWithCycle(int $quotaTotal = 4, int $quotaUsed = 0, ?int
 {
     $plan = Plan::factory()->create(['max_redemptions_per_day_per_car_wash' => $maxPerDay]);
     $user = User::factory()->create();
+    Vehicle::factory()->create(['user_id' => $user->id]);
     $subscription = Subscription::factory()->for($user)->for($plan, 'plan')->active()->create();
     $cycle = SubscriptionCycle::factory()->create([
         'subscription_id' => $subscription->id,

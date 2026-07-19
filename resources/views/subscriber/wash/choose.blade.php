@@ -25,28 +25,51 @@
                 </x-confirm-modal>
             </x-card>
         @else
-            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Lava-rápidos disponíveis</h2>
+            {{-- Passo 0 (task-15, seção 3): com 2+ veículos, escolhe qual
+                 vai ser lavado antes de gerar o código. Estado
+                 compartilhado com os forms de "Gerar código" abaixo via
+                 Alpine, num único x-data envolvendo o bloco inteiro. --}}
+            <div x-data="{ selectedVehicleId: {{ $vehicles->first()->id }} }">
+                @if ($vehicles->count() > 1)
+                    <x-card title="Qual veículo vai ser lavado?" class="mb-4">
+                        <div class="space-y-2">
+                            @foreach ($vehicles as $vehicle)
+                                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                    <input type="radio" x-model.number="selectedVehicleId" value="{{ $vehicle->id }}">
+                                    <span class="font-mono">{{ $vehicle->plate }}</span>
+                                    <span class="text-gray-500 dark:text-gray-400">
+                                        {{ collect([$vehicle->brand, $vehicle->model, $vehicle->color])->filter()->join(' · ') }}
+                                    </span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </x-card>
+                @endif
 
-            @if ($carWashes->isEmpty())
-                <x-empty-state message="Nenhum lava-rápido disponível no momento." />
-            @else
-                <div class="space-y-3">
-                    @foreach ($carWashes as $carWash)
-                        <x-card>
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <p class="font-medium text-gray-900 dark:text-gray-100">{{ $carWash->name }}</p>
-                                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ $carWash->city }}/{{ $carWash->state }}</p>
+                <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Lava-rápidos disponíveis</h2>
+
+                @if ($carWashes->isEmpty())
+                    <x-empty-state message="Nenhum lava-rápido disponível no momento." />
+                @else
+                    <div class="space-y-3">
+                        @foreach ($carWashes as $carWash)
+                            <x-card>
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="font-medium text-gray-900 dark:text-gray-100">{{ $carWash->name }}</p>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ $carWash->city }}/{{ $carWash->state }}</p>
+                                    </div>
+                                    <form method="POST" action="{{ route('wash.request', $carWash) }}">
+                                        @csrf
+                                        <input type="hidden" name="vehicle_id" :value="selectedVehicleId">
+                                        <button type="submit" class="btn-primary">Gerar código</button>
+                                    </form>
                                 </div>
-                                <form method="POST" action="{{ route('wash.request', $carWash) }}">
-                                    @csrf
-                                    <button type="submit" class="btn-primary">Gerar código</button>
-                                </form>
-                            </div>
-                        </x-card>
-                    @endforeach
-                </div>
-            @endif
+                            </x-card>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
         @endif
 
         <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mt-8 mb-3">Histórico de lavagens</h2>

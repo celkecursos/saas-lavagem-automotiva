@@ -5,12 +5,14 @@ use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\SubscriptionCycle;
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Models\WashRedemption;
 
 // Ver task-8, seções 3 e 4 — histórico dos dois lados.
 
 test('assinante ve seu proprio historico de lavagens em /lavagem/escolher', function () {
     $user = User::factory()->create();
+    Vehicle::factory()->create(['user_id' => $user->id]);
     $plan = Plan::factory()->create();
     $subscription = Subscription::factory()->for($user)->for($plan, 'plan')->active()->create();
     $cycle = SubscriptionCycle::factory()->create(['subscription_id' => $subscription->id]);
