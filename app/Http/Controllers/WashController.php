@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CarWash;
 use App\Models\WashRedemption;
+use App\Services\Wash\CarWashRatingService;
 use App\Services\Wash\WashRedemptionService;
 use App\Services\Wash\WashRedemptionValidationException;
 use Illuminate\Http\RedirectResponse;
@@ -43,7 +44,7 @@ class WashController extends Controller
         $history = WashRedemption::whereHas(
             'subscriptionCycle.subscription',
             fn ($query) => $query->where('user_id', $request->user()->id),
-        )->with('carWash')->latest('created_at')->paginate(10);
+        )->with(['carWash', 'rating'])->latest('created_at')->paginate(10);
 
         return view('subscriber.wash.choose', compact('carWashes', 'activeRedemption', 'history'));
     }
@@ -79,6 +80,24 @@ class WashController extends Controller
         $washRedemption->update(['status' => 'canceled']);
 
         return redirect()->route('wash.choose')->with('success', 'Código cancelado.');
+    }
+
+    public function rate(Request $request, WashRedemption $washRedemption, CarWashRatingService $service): RedirectResponse
+    {
+        $this->authorizeOwnership($request, $washRedemption);
+
+        $validated = $request->validate([
+            'score' => ['required', 'integer', 'min:0', 'max:100'],
+            'comment' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $service->rate($washRedemption, $request->user()->id, $validated['score'], $validated['comment'] ?? null);
+        } catch (WashRedemptionValidationException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('wash.choose')->with('success', 'Avaliação registrada. Obrigado!');
     }
 
     private function authorizeOwnership(Request $request, WashRedemption $washRedemption): void

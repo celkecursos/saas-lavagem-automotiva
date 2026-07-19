@@ -56,6 +56,7 @@
                 <x-data-table.th>Lava-rápido</x-data-table.th>
                 <x-data-table.th>Status</x-data-table.th>
                 <x-data-table.th>Data</x-data-table.th>
+                <x-data-table.th>Avaliação</x-data-table.th>
             </x-slot:head>
 
             @foreach ($history as $redemption)
@@ -64,6 +65,22 @@
                     <td class="px-4 py-3"><x-badge :status="$redemption->status" /></td>
                     <td class="px-4 py-3 text-gray-500 dark:text-gray-400">
                         {{ ($redemption->redeemed_at ?? $redemption->created_at)->format('d/m/Y H:i') }}
+                    </td>
+                    <td class="px-4 py-3">
+                        {{-- Convite pra avaliar, não bloqueante (task-8, §2, passo 7). --}}
+                        @if ($redemption->status === 'completed')
+                            <form method="POST" action="{{ route('wash.rate', $redemption) }}" class="flex items-center gap-2">
+                                @csrf
+                                <select name="score" class="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-backgroundthirddark text-sm">
+                                    @foreach ([100, 90, 80, 70, 50, 0] as $option)
+                                        <option value="{{ $option }}" @selected($redemption->rating?->score === $option)>{{ $option }}</option>
+                                    @endforeach
+                                </select>
+                                <button type="submit" class="text-sm text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
+                                    {{ $redemption->rating ? 'Editar avaliação' : 'Avaliar' }}
+                                </button>
+                            </form>
+                        @endif
                     </td>
                 </tr>
             @endforeach

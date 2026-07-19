@@ -101,6 +101,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/lavagem/escolher', [WashController::class, 'choose'])->name('wash.choose');
     Route::post('/lavagem/{car_wash}/resgatar', [WashController::class, 'request'])->name('wash.request');
     Route::post('/lavagem/{wash_redemption}/cancelar', [WashController::class, 'cancel'])->name('wash.cancel');
+    Route::post('/lavagem/{wash_redemption}/avaliar', [WashController::class, 'rate'])->name('wash.rate');
 });
 
 // Webhook de pagamento — genérico por gateway (task-4/task-7, seção 3).
