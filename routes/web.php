@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditController;
 use App\Http\Controllers\Admin\CarWashController;
 use App\Http\Controllers\Admin\CancellationRequestController;
 use App\Http\Controllers\Admin\CarWashProductSubscriptionController;
@@ -177,6 +178,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:orders.index')->name('orders.index');
     Route::get('/pedidos/{order}', [OrderController::class, 'show'])
         ->middleware('permission:orders.show')->name('orders.show');
+
+    // Auditoria (task-11, seção 4).
+    Route::get('/auditoria', [AuditController::class, 'index'])
+        ->middleware('permission:audits.index')->name('audits.index');
 
     // Fila de aprovação de lava-rápidos (task-5, seção 4).
     Route::get('/lava-rapidos', [CarWashController::class, 'index'])

@@ -30,13 +30,15 @@ test('item de rota nao registrada nao aparece e nao quebra a sidebar', function 
     $user->assignRole('Super Admin');
     $this->actingAs($user);
 
-    // Rotas já registradas aparecem; as das tasks futuras (ex:
-    // audits.index, task-11) não aparecem e NÃO derrubam a página com
-    // RouteNotFoundException — é a proteção Route::has() da task-14.
+    // Rotas já registradas aparecem; as de tasks ainda não implementadas
+    // (ex: parking-billing-*, task-10) não aparecem e NÃO derrubam a
+    // página com RouteNotFoundException — proteção Route::has() da
+    // task-14.
     $html = renderAdminSidebar();
 
     expect($html)->toContain('Lava-rápidos')
-        ->and($html)->not->toContain('Auditoria');
+        ->and($html)->toContain('Auditoria')
+        ->and($html)->not->toContain('Configurações do estacionamento');
 });
 
 test('item aparece so pra quem tem a permission correspondente', function () {
