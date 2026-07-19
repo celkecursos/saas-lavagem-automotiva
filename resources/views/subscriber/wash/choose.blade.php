@@ -80,6 +80,15 @@
                                     {{ $redemption->rating ? 'Editar avaliação' : 'Avaliar' }}
                                 </button>
                             </form>
+
+                            <x-confirm-modal :action="route('wash.request-cancellation', $redemption)"
+                                             title="Solicitar cancelamento desta lavagem?"
+                                             message="Um admin vai analisar o pedido antes de decidir."
+                                             confirm-label="Enviar solicitação">
+                                <x-slot:trigger><button type="button" class="text-sm text-red-600 dark:text-red-400 hover:underline cursor-pointer">Solicitar cancelamento</button></x-slot:trigger>
+                                <textarea name="reason" rows="2" required placeholder="Motivo (obrigatório)"
+                                          class="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-backgroundthirddark text-sm text-gray-900 dark:text-gray-100"></textarea>
+                            </x-confirm-modal>
                         @endif
                     </td>
                 </tr>

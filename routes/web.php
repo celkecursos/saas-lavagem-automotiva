@@ -102,6 +102,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/lavagem/{car_wash}/resgatar', [WashController::class, 'request'])->name('wash.request');
     Route::post('/lavagem/{wash_redemption}/cancelar', [WashController::class, 'cancel'])->name('wash.cancel');
     Route::post('/lavagem/{wash_redemption}/avaliar', [WashController::class, 'rate'])->name('wash.rate');
+    Route::post('/lavagem/{wash_redemption}/solicitar-cancelamento', [WashController::class, 'requestCancellation'])
+        ->name('wash.request-cancellation');
 });
 
 // Webhook de pagamento — genérico por gateway (task-4/task-7, seção 3).
@@ -189,6 +191,8 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
     Route::post('/confirmar-lavagem', [WashConfirmationController::class, 'confirm'])
         ->name('panel.washes.confirm.store');
     Route::get('/lavagens', [WashHistoryController::class, 'index'])->name('panel.washes.index');
+    Route::post('/lavagens/{wash_redemption}/solicitar-cancelamento', [WashHistoryController::class, 'requestCancellation'])
+        ->name('panel.washes.request-cancellation');
 });
 
 // Aceite público de convite de equipe (task-5, seção 6).

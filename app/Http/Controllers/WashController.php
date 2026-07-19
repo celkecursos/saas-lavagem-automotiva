@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CarWash;
 use App\Models\WashRedemption;
 use App\Services\Wash\CarWashRatingService;
+use App\Services\Wash\WashCancellationRequestService;
 use App\Services\Wash\WashRedemptionService;
 use App\Services\Wash\WashRedemptionValidationException;
 use Illuminate\Http\RedirectResponse;
@@ -98,6 +99,22 @@ class WashController extends Controller
         }
 
         return redirect()->route('wash.choose')->with('success', 'Avaliação registrada. Obrigado!');
+    }
+
+    public function requestCancellation(Request $request, WashRedemption $washRedemption, WashCancellationRequestService $service): RedirectResponse
+    {
+        $this->authorizeOwnership($request, $washRedemption);
+
+        $validated = $request->validate(['reason' => ['required', 'string', 'max:2000']]);
+
+        try {
+            $service->request($washRedemption, $request->user()->id, $validated['reason']);
+        } catch (WashRedemptionValidationException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('wash.choose')
+            ->with('success', 'Solicitação de cancelamento enviada. A plataforma vai analisar.');
     }
 
     private function authorizeOwnership(Request $request, WashRedemption $washRedemption): void
