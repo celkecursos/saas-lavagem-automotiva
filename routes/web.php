@@ -23,6 +23,7 @@ use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\RegisterCarWashController;
 use App\Http\Controllers\RegisterSubscriberController;
 use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\WashController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -99,6 +100,15 @@ Route::middleware('auth')->group(function () {
 
     // Minhas indicações (task-16, seção 3).
     Route::get('/indicacoes', [ReferralController::class, 'index'])->name('referrals.index');
+
+    // Meus veículos (task-15, seção 2).
+    Route::get('/veiculos', [VehicleController::class, 'index'])->name('vehicles.index');
+    Route::get('/veiculos/criar', [VehicleController::class, 'create'])->name('vehicles.create');
+    Route::post('/veiculos', [VehicleController::class, 'store'])->name('vehicles.store');
+    Route::get('/veiculos/{vehicle}/editar', [VehicleController::class, 'edit'])->name('vehicles.edit');
+    Route::put('/veiculos/{vehicle}', [VehicleController::class, 'update'])->name('vehicles.update');
+    Route::delete('/veiculos/{vehicle}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');
+    Route::get('/veiculos/{vehicle}/lavagens', [VehicleController::class, 'washes'])->name('vehicles.washes');
 
     // Resgate de lavagem — lado do assinante (task-8, seção 6).
     Route::get('/lavagem/escolher', [WashController::class, 'choose'])->name('wash.choose');
