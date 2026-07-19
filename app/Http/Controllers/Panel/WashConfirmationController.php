@@ -13,12 +13,31 @@ use Illuminate\View\View;
 /**
  * Confirmação de lavagem pelo funcionário do lava-rápido — a ação mais
  * frequente do balcão (task-8, seção 2, passo 4; task-14, seção 5).
+ * Fluxo em 2 passos desde a task-15: busca o código e mostra o veículo
+ * pra conferência visual antes de aceitar de fato.
  */
 class WashConfirmationController extends Controller
 {
     public function show(): View
     {
         return view('panel.wash.confirm');
+    }
+
+    public function lookup(Request $request, WashRedemptionService $service): View
+    {
+        $validated = $request->validate([
+            'confirmation_code' => ['required', 'string', 'size:6'],
+        ]);
+
+        $carWash = CarWash::findOrFail(session('current_car_wash_id'));
+
+        try {
+            $preview = $service->findPendingCode($carWash, $validated['confirmation_code']);
+        } catch (WashRedemptionValidationException $e) {
+            return view('panel.wash.confirm', ['lookupError' => $e->getMessage()]);
+        }
+
+        return view('panel.wash.confirm', compact('preview'));
     }
 
     public function confirm(Request $request, WashRedemptionService $service): RedirectResponse

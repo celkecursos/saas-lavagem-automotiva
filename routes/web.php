@@ -219,6 +219,8 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
     // Confirmar lavagem (task-8, seção 4).
     Route::get('/confirmar-lavagem', [WashConfirmationController::class, 'show'])
         ->name('panel.washes.confirm');
+    Route::post('/confirmar-lavagem/buscar', [WashConfirmationController::class, 'lookup'])
+        ->name('panel.washes.confirm.lookup');
     Route::post('/confirmar-lavagem', [WashConfirmationController::class, 'confirm'])
         ->name('panel.washes.confirm.store');
     Route::get('/lavagens', [WashHistoryController::class, 'index'])->name('panel.washes.index');

@@ -84,6 +84,24 @@ class WashRedemptionService
     }
 
     /**
+     * Busca o código sem confirmar — permite mostrar placa + marca/
+     * modelo/cor do veículo pra conferência visual ANTES de aceitar
+     * (task-15, seção 3).
+     *
+     * @throws WashRedemptionValidationException
+     */
+    public function findPendingCode(CarWash $carWash, string $code): WashRedemption
+    {
+        $redemption = $this->findConfirmableRedemption($carWash, $code);
+
+        if ($redemption === null) {
+            throw new WashRedemptionValidationException('Código inválido, já usado ou expirado.');
+        }
+
+        return $redemption->load('vehicle');
+    }
+
+    /**
      * Confirmação pelo funcionário no local (task-8, seção 2, passo 4)
      * — só aqui a cota é efetivamente debitada.
      *
@@ -91,12 +109,7 @@ class WashRedemptionService
      */
     public function confirm(CarWash $carWash, string $code, int $confirmedByUserId): WashRedemption
     {
-        $redemption = WashRedemption::where('confirmation_code', $code)
-            // Nunca aceita código de outro lava-rápido (task-8, §2, passo 4).
-            ->where('car_wash_id', $carWash->id)
-            ->where('status', 'requested')
-            ->where('code_expires_at', '>', now())
-            ->first();
+        $redemption = $this->findConfirmableRedemption($carWash, $code);
 
         if ($redemption === null) {
             throw new WashRedemptionValidationException('Código inválido, já usado ou expirado.');
@@ -111,6 +124,16 @@ class WashRedemptionService
         $redemption->subscriptionCycle()->increment('quota_used');
 
         return $redemption;
+    }
+
+    private function findConfirmableRedemption(CarWash $carWash, string $code): ?WashRedemption
+    {
+        return WashRedemption::where('confirmation_code', $code)
+            // Nunca aceita código de outro lava-rápido (task-8, §2, passo 4).
+            ->where('car_wash_id', $carWash->id)
+            ->where('status', 'requested')
+            ->where('code_expires_at', '>', now())
+            ->first();
     }
 
     private static function generateCode(): string
