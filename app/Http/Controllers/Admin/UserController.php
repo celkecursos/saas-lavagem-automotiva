@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\LoyaltyPointsLedgerEntry;
 use App\Models\User;
 use App\Models\WashRedemption;
 use Illuminate\Auth\Events\Registered;
@@ -54,6 +55,7 @@ class UserController extends Controller
             'referralReceived' => fn ($q) => $q->with('referrer')->latest('created_at'),
             'carWashes',
             'cancellationRequestsMade' => fn ($q) => $q->where('status', 'pending')->latest('created_at'),
+            'userAchievements' => fn ($q) => $q->with('achievement')->latest('unlocked_at'),
         ]);
 
         $cycleIds = $user->subscriptions->flatMap(fn ($subscription) => $subscription->cycles()->pluck('id'));
@@ -62,7 +64,9 @@ class UserController extends Controller
             ->latest('created_at')
             ->get();
 
-        return view('admin.users.show', compact('user', 'washRedemptions'));
+        $loyaltyBalance = LoyaltyPointsLedgerEntry::balanceFor($user->id);
+
+        return view('admin.users.show', compact('user', 'washRedemptions', 'loyaltyBalance'));
     }
 
     public function suspend(Request $request, User $user): RedirectResponse

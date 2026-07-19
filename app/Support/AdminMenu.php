@@ -63,6 +63,18 @@ class AdminMenu
                 'badge' => null,
             ],
             [
+                'label' => 'Conquistas',
+                'route' => 'achievements.index',
+                'permission' => 'achievements.index',
+                'badge' => null,
+            ],
+            [
+                'label' => 'Recompensas de fidelidade',
+                'route' => 'loyalty-redemptions.index',
+                'permission' => 'loyalty-redemptions.index',
+                'badge' => null,
+            ],
+            [
                 'label' => 'Assinantes',
                 'route' => 'subscriptions.index',
                 'permission' => 'users.index',

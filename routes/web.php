@@ -3,7 +3,9 @@
 use App\Http\Controllers\Admin\AuditController;
 use App\Http\Controllers\Admin\CarWashController;
 use App\Http\Controllers\Admin\CancellationRequestController;
+use App\Http\Controllers\Admin\AchievementController;
 use App\Http\Controllers\Admin\CarWashProductSubscriptionController;
+use App\Http\Controllers\Admin\LoyaltyRedemptionController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\Admin\PayoutController;
@@ -20,6 +22,7 @@ use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionContro
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\LoyaltyController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ParkingEntryController;
@@ -134,6 +137,12 @@ Route::middleware('auth')->group(function () {
     // Minhas indicações (task-16, seção 3).
     Route::get('/indicacoes', [ReferralController::class, 'index'])->name('referrals.index');
 
+    // Fidelidade e gamificação (task-20, seção 7).
+    Route::get('/fidelidade', [LoyaltyController::class, 'index'])->name('loyalty.index');
+    Route::get('/fidelidade/loja', [LoyaltyController::class, 'shop'])->name('loyalty.shop');
+    Route::post('/fidelidade/loja/{loyalty_redemption}/resgatar', [LoyaltyController::class, 'redeem'])
+        ->name('loyalty.shop.redeem');
+
     // Meus veículos (task-15, seção 2).
     Route::get('/veiculos', [VehicleController::class, 'index'])->name('vehicles.index');
     Route::get('/veiculos/criar', [VehicleController::class, 'create'])->name('vehicles.create');
@@ -202,6 +211,29 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:payout-plans.edit')->name('payout-plans.edit');
     Route::put('/planos-de-repasse/{payout_plan}', [PayoutPlanController::class, 'update'])
         ->middleware('permission:payout-plans.edit')->name('payout-plans.update');
+
+    // Fidelidade e gamificação — catálogos (task-20, seção 6).
+    Route::get('/achievements', [AchievementController::class, 'index'])
+        ->middleware('permission:achievements.index')->name('achievements.index');
+    Route::get('/achievements/criar', [AchievementController::class, 'create'])
+        ->middleware('permission:achievements.create')->name('achievements.create');
+    Route::post('/achievements', [AchievementController::class, 'store'])
+        ->middleware('permission:achievements.create')->name('achievements.store');
+    Route::get('/achievements/{achievement}/editar', [AchievementController::class, 'edit'])
+        ->middleware('permission:achievements.edit')->name('achievements.edit');
+    Route::put('/achievements/{achievement}', [AchievementController::class, 'update'])
+        ->middleware('permission:achievements.edit')->name('achievements.update');
+
+    Route::get('/loyalty-redemptions', [LoyaltyRedemptionController::class, 'index'])
+        ->middleware('permission:loyalty-redemptions.index')->name('loyalty-redemptions.index');
+    Route::get('/loyalty-redemptions/criar', [LoyaltyRedemptionController::class, 'create'])
+        ->middleware('permission:loyalty-redemptions.create')->name('loyalty-redemptions.create');
+    Route::post('/loyalty-redemptions', [LoyaltyRedemptionController::class, 'store'])
+        ->middleware('permission:loyalty-redemptions.create')->name('loyalty-redemptions.store');
+    Route::get('/loyalty-redemptions/{loyalty_redemption}/editar', [LoyaltyRedemptionController::class, 'edit'])
+        ->middleware('permission:loyalty-redemptions.edit')->name('loyalty-redemptions.edit');
+    Route::put('/loyalty-redemptions/{loyalty_redemption}', [LoyaltyRedemptionController::class, 'update'])
+        ->middleware('permission:loyalty-redemptions.edit')->name('loyalty-redemptions.update');
 
     // Assinantes e pedidos (task-11, seção 4).
     Route::get('/assinantes', [AdminSubscriptionController::class, 'index'])

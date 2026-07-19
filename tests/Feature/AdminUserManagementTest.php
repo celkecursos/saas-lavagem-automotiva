@@ -1,15 +1,19 @@
 <?php
 
+use App\Models\Achievement;
 use App\Models\CancellationRequest;
 use App\Models\CarWash;
+use App\Models\LoyaltyPointsLedgerEntry;
 use App\Models\Order;
 use App\Models\Plan;
 use App\Models\ReferralReward;
 use App\Models\Subscription;
 use App\Models\SubscriptionCycle;
 use App\Models\User;
+use App\Models\UserAchievement;
 use App\Models\Vehicle;
 use App\Models\WashRedemption;
+use Database\Seeders\AchievementSeeder;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -211,4 +215,19 @@ test('solicitacao de cancelamento aberta aparece na visao 360', function () {
 
     $this->actingAs($admin)->get(route('users.show', $target))
         ->assertOk()->assertSee('Cobrança errada');
+});
+
+test('bloco de fidelidade na visao 360 mostra saldo e conquistas desbloqueadas', function () {
+    $this->seed(DatabaseSeeder::class);
+    $this->seed(AchievementSeeder::class);
+    $admin = userAdmin();
+    $target = User::factory()->create();
+    $achievement = Achievement::where('code', 'first_wash')->sole();
+    UserAchievement::create(['user_id' => $target->id, 'achievement_id' => $achievement->id, 'unlocked_at' => now()]);
+    LoyaltyPointsLedgerEntry::create(['user_id' => $target->id, 'points' => 25, 'reason' => 'achievement', 'created_at' => now()]);
+
+    $this->actingAs($admin)->get(route('users.show', $target))
+        ->assertOk()
+        ->assertSee('25')
+        ->assertSee('Primeira Lavagem');
 });

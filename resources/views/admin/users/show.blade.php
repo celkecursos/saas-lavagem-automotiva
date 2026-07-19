@@ -198,6 +198,24 @@
         </x-card>
     </div>
 
+    <x-card title="Fidelidade" class="mb-6">
+        <p class="text-sm text-gray-700 dark:text-gray-300 mb-3">
+            Saldo de pontos: <strong>{{ $loyaltyBalance }}</strong>
+        </p>
+        @if ($user->userAchievements->isEmpty())
+            <x-empty-state message="Nenhuma conquista desbloqueada ainda." />
+        @else
+            <ul class="flex flex-wrap gap-3 text-sm text-gray-700 dark:text-gray-300">
+                @foreach ($user->userAchievements as $userAchievement)
+                    <li class="flex items-center gap-1">
+                        <span>{{ $userAchievement->achievement->icon }}</span>
+                        <span>{{ $userAchievement->achievement->name }}</span>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </x-card>
+
     @if ($user->cancellationRequestsMade->isNotEmpty())
         <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">Solicitações de cancelamento abertas</h2>
         <x-data-table :rows="$user->cancellationRequestsMade" empty-message="Nenhuma solicitação aberta">
