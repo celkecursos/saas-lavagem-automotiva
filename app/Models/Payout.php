@@ -14,7 +14,7 @@ use OwenIt\Auditing\Contracts\Auditable;
  * cálculo na task-9). Auditable: todo o ciclo de payouts (task-3,
  * seção 5).
  */
-#[Fillable(['car_wash_id', 'period_start', 'period_end', 'total_amount_cents', 'status', 'paid_at'])]
+#[Fillable(['car_wash_id', 'period_start', 'period_end', 'total_amount_cents', 'payment_reference', 'status', 'paid_at'])]
 class Payout extends Model implements Auditable
 {
     use HasFactory;

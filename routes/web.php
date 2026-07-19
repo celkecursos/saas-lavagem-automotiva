@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\CarWashController;
 use App\Http\Controllers\Admin\CarWashProductSubscriptionController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
+use App\Http\Controllers\Admin\PayoutController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
@@ -137,6 +138,16 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/ativacoes-clube/{subscription}/rejeitar', [CarWashProductSubscriptionController::class, 'reject'])
         ->middleware('permission:car-wash-product-subscriptions.reject')
         ->name('car-wash-product-subscriptions.reject');
+
+    // Repasses (task-9, seção 3).
+    Route::get('/repasses', [PayoutController::class, 'index'])
+        ->middleware('permission:payouts.index')->name('payouts.index');
+    Route::get('/repasses/{payout}', [PayoutController::class, 'show'])
+        ->middleware('permission:payouts.index')->name('payouts.show');
+    Route::post('/repasses/{payout}/marcar-pago', [PayoutController::class, 'markPaid'])
+        ->middleware('permission:payouts.mark-paid')->name('payouts.mark-paid');
+    Route::post('/repasses/{payout}/marcar-falhou', [PayoutController::class, 'markFailed'])
+        ->middleware('permission:payouts.mark-failed')->name('payouts.mark-failed');
 
     // Gateways de pagamento (task-4, seção 4) — middleware permission
     // em cada rota individualmente (padrão do projeto, ver task-23).
