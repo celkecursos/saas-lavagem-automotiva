@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\CarWashProductSubscriptionController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\Admin\PayoutController;
+use App\Http\Controllers\Admin\PayoutPlanController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Admin\PlanFeatureController;
 use App\Http\Controllers\CheckoutController;
@@ -152,6 +153,18 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:payment-plans.edit')->name('payment-plans.features.destroy');
     Route::post('/planos/{plan}/vantagens/{feature}/mover', [PlanFeatureController::class, 'move'])
         ->middleware('permission:payment-plans.edit')->name('payment-plans.features.move');
+
+    // Catálogo de planos de repasse (task-9/11).
+    Route::get('/planos-de-repasse', [PayoutPlanController::class, 'index'])
+        ->middleware('permission:payout-plans.index')->name('payout-plans.index');
+    Route::get('/planos-de-repasse/criar', [PayoutPlanController::class, 'create'])
+        ->middleware('permission:payout-plans.create')->name('payout-plans.create');
+    Route::post('/planos-de-repasse', [PayoutPlanController::class, 'store'])
+        ->middleware('permission:payout-plans.create')->name('payout-plans.store');
+    Route::get('/planos-de-repasse/{payout_plan}/editar', [PayoutPlanController::class, 'edit'])
+        ->middleware('permission:payout-plans.edit')->name('payout-plans.edit');
+    Route::put('/planos-de-repasse/{payout_plan}', [PayoutPlanController::class, 'update'])
+        ->middleware('permission:payout-plans.edit')->name('payout-plans.update');
 
     // Fila de aprovação de lava-rápidos (task-5, seção 4).
     Route::get('/lava-rapidos', [CarWashController::class, 'index'])
