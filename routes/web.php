@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\CarWashController;
+use App\Http\Controllers\Admin\CancellationRequestController;
 use App\Http\Controllers\Admin\CarWashProductSubscriptionController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
@@ -148,6 +149,14 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:payouts.mark-paid')->name('payouts.mark-paid');
     Route::post('/repasses/{payout}/marcar-falhou', [PayoutController::class, 'markFailed'])
         ->middleware('permission:payouts.mark-failed')->name('payouts.mark-failed');
+
+    // Solicitações de cancelamento (task-9, seção 3.2).
+    Route::get('/cancelamentos', [CancellationRequestController::class, 'index'])
+        ->middleware('permission:cancellation-requests.index')->name('cancellation-requests.index');
+    Route::post('/cancelamentos/{cancellation_request}/aprovar', [CancellationRequestController::class, 'approve'])
+        ->middleware('permission:cancellation-requests.approve')->name('cancellation-requests.approve');
+    Route::post('/cancelamentos/{cancellation_request}/rejeitar', [CancellationRequestController::class, 'reject'])
+        ->middleware('permission:cancellation-requests.reject')->name('cancellation-requests.reject');
 
     // Gateways de pagamento (task-4, seção 4) — middleware permission
     // em cada rota individualmente (padrão do projeto, ver task-23).

@@ -40,6 +40,11 @@ class WashRedemption extends Model implements Auditable
         return $this->belongsTo(User::class, 'confirmed_by_user_id');
     }
 
+    public function payoutItem(): BelongsTo
+    {
+        return $this->belongsTo(PayoutItem::class);
+    }
+
     public function rating(): HasOne
     {
         return $this->hasOne(CarWashRating::class);
