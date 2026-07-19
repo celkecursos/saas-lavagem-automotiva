@@ -8,18 +8,25 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
+use OwenIt\Auditing\Contracts\Auditable;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password', 'phone', 'cpf', 'referred_by_user_id'])]
+/**
+ * Auditable: suspender/reativar uma conta é ação sensível o bastante
+ * pra rastrear quem fez e quando (task-3, seção 5; task-22, seção 1).
+ */
+#[Fillable(['name', 'email', 'password', 'phone', 'cpf', 'referred_by_user_id', 'suspended_at', 'suspension_reason'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements MustVerifyEmail
+class User extends Authenticatable implements Auditable, MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, Notifiable;
+    use \OwenIt\Auditing\Auditable;
 
     protected static function booted(): void
     {
@@ -68,6 +75,46 @@ class User extends Authenticatable implements MustVerifyEmail
     public function referralsMade(): HasMany
     {
         return $this->hasMany(ReferralReward::class, 'referrer_user_id');
+    }
+
+    /**
+     * Indicação que TROUXE este usuário (ele é o indicado) — task-16.
+     */
+    public function referralReceived(): HasMany
+    {
+        return $this->hasMany(ReferralReward::class, 'referred_user_id');
+    }
+
+    /**
+     * Pedidos deste usuário — cobre tanto mensalidade de clube quanto,
+     * se ele for dono de lava-rápido, cobranças de estacionamento
+     * pagas por ele (orders.user_id já é genérico o bastante — task-22,
+     * seção 3).
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    public function carWashRatings(): HasMany
+    {
+        return $this->hasMany(CarWashRating::class);
+    }
+
+    /**
+     * Lava-rápidos onde é owner/employee (task-5, seção 1; task-22,
+     * seção 3).
+     */
+    public function carWashes(): BelongsToMany
+    {
+        return $this->belongsToMany(CarWash::class, 'car_wash_users')
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    public function cancellationRequestsMade(): HasMany
+    {
+        return $this->hasMany(CancellationRequest::class, 'requested_by_user_id');
     }
 
     /**

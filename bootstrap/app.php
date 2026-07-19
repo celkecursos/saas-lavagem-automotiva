@@ -19,6 +19,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
         ]);
+
+        // Bloqueia conta suspensa em QUALQUER área, mesmo com sessão já
+        // ativa (task-22, seção 4) — roda em toda request web, depois
+        // de StartSession resolver o usuário autenticado.
+        $middleware->appendToGroup('web', \App\Http\Middleware\EnsureUserIsNotSuspended::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

@@ -50,6 +50,16 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // Suspensão bloqueia o login na hora, mesmo com senha certa
+        // (task-22, seção 4) — o middleware cobre sessão já ativa.
+        if (Auth::user()->suspended_at !== null) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'Sua conta foi suspensa. Entre em contato com o suporte.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 
