@@ -39,7 +39,13 @@ class WashController extends Controller
             ->where('code_expires_at', '>', now())
             ->first();
 
-        return view('subscriber.wash.choose', compact('carWashes', 'activeRedemption'));
+        // Histórico de lavagens do assinante (task-8, seção 3).
+        $history = WashRedemption::whereHas(
+            'subscriptionCycle.subscription',
+            fn ($query) => $query->where('user_id', $request->user()->id),
+        )->with('carWash')->latest('created_at')->paginate(10);
+
+        return view('subscriber.wash.choose', compact('carWashes', 'activeRedemption', 'history'));
     }
 
     public function request(Request $request, CarWash $carWash, WashRedemptionService $service): RedirectResponse

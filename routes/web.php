@@ -12,6 +12,7 @@ use App\Http\Controllers\Panel\ProductController as PanelProductController;
 use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
 use App\Http\Controllers\Panel\TeamController as PanelTeamController;
 use App\Http\Controllers\Panel\WashConfirmationController;
+use App\Http\Controllers\Panel\WashHistoryController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
@@ -186,6 +187,7 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
         ->name('panel.washes.confirm');
     Route::post('/confirmar-lavagem', [WashConfirmationController::class, 'confirm'])
         ->name('panel.washes.confirm.store');
+    Route::get('/lavagens', [WashHistoryController::class, 'index'])->name('panel.washes.index');
 });
 
 // Aceite público de convite de equipe (task-5, seção 6).

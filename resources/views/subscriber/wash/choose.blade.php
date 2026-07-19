@@ -48,5 +48,25 @@
                 </div>
             @endif
         @endif
+
+        <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mt-8 mb-3">Histórico de lavagens</h2>
+
+        <x-data-table :rows="$history" empty-message="Nenhuma lavagem ainda">
+            <x-slot:head>
+                <x-data-table.th>Lava-rápido</x-data-table.th>
+                <x-data-table.th>Status</x-data-table.th>
+                <x-data-table.th>Data</x-data-table.th>
+            </x-slot:head>
+
+            @foreach ($history as $redemption)
+                <tr>
+                    <td class="px-4 py-3">{{ $redemption->carWash->name }}</td>
+                    <td class="px-4 py-3"><x-badge :status="$redemption->status" /></td>
+                    <td class="px-4 py-3 text-gray-500 dark:text-gray-400">
+                        {{ ($redemption->redeemed_at ?? $redemption->created_at)->format('d/m/Y H:i') }}
+                    </td>
+                </tr>
+            @endforeach
+        </x-data-table>
     </div>
 @endsection
