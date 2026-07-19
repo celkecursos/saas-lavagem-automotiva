@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\CarWashProductSubscriptionController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\Admin\PayoutController;
+use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
@@ -127,6 +128,18 @@ Route::post('/webhooks/{gatewayTypeSlug}', [PaymentWebhookController::class, 'ha
 // convenção de idioma na orientacao.txt).
 Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/', AdminDashboardController::class)->name('admin.dashboard');
+
+    // CRUD de planos (task-11, seção 4).
+    Route::get('/planos', [AdminPlanController::class, 'index'])
+        ->middleware('permission:payment-plans.index')->name('payment-plans.index');
+    Route::get('/planos/criar', [AdminPlanController::class, 'create'])
+        ->middleware('permission:payment-plans.create')->name('payment-plans.create');
+    Route::post('/planos', [AdminPlanController::class, 'store'])
+        ->middleware('permission:payment-plans.create')->name('payment-plans.store');
+    Route::get('/planos/{plan}/editar', [AdminPlanController::class, 'edit'])
+        ->middleware('permission:payment-plans.edit')->name('payment-plans.edit');
+    Route::put('/planos/{plan}', [AdminPlanController::class, 'update'])
+        ->middleware('permission:payment-plans.edit')->name('payment-plans.update');
 
     // Fila de aprovação de lava-rápidos (task-5, seção 4).
     Route::get('/lava-rapidos', [CarWashController::class, 'index'])
