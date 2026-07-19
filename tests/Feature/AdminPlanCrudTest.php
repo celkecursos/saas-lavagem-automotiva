@@ -27,11 +27,12 @@ test('admin cria plano', function () {
         'quota_period' => 'monthly',
     ])->assertRedirect(route('payment-plans.index'));
 
-    $plan = Plan::sole();
+    // UserSeeder (task-23) já cria um plano "Essencial" pra gabrielly —
+    // busca pelo nome em vez de sole() pra não colidir.
+    $plan = Plan::where('name', 'Plano Turbo')->sole();
     // Checkbox não enviado no teste -> fica de fora do validated() ->
     // usa o default da coluna (true).
-    expect($plan->name)->toBe('Plano Turbo')
-        ->and($plan->active)->toBeTrue();
+    expect($plan->active)->toBeTrue();
 });
 
 test('admin edita plano e a mudanca gera auditoria', function () {
