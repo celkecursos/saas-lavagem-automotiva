@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\Admin\PayoutController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
+use App\Http\Controllers\Admin\PlanFeatureController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
@@ -140,6 +141,17 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:payment-plans.edit')->name('payment-plans.edit');
     Route::put('/planos/{plan}', [AdminPlanController::class, 'update'])
         ->middleware('permission:payment-plans.edit')->name('payment-plans.update');
+
+    // Vantagens de marketing (plan_features) — dentro da tela de editar
+    // plano (task-11, seção 4), mesma permission de payment-plans.edit.
+    Route::post('/planos/{plan}/vantagens', [PlanFeatureController::class, 'store'])
+        ->middleware('permission:payment-plans.edit')->name('payment-plans.features.store');
+    Route::put('/planos/{plan}/vantagens/{feature}', [PlanFeatureController::class, 'update'])
+        ->middleware('permission:payment-plans.edit')->name('payment-plans.features.update');
+    Route::delete('/planos/{plan}/vantagens/{feature}', [PlanFeatureController::class, 'destroy'])
+        ->middleware('permission:payment-plans.edit')->name('payment-plans.features.destroy');
+    Route::post('/planos/{plan}/vantagens/{feature}/mover', [PlanFeatureController::class, 'move'])
+        ->middleware('permission:payment-plans.edit')->name('payment-plans.features.move');
 
     // Fila de aprovação de lava-rápidos (task-5, seção 4).
     Route::get('/lava-rapidos', [CarWashController::class, 'index'])

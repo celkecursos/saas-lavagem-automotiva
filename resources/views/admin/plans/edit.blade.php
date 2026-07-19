@@ -51,4 +51,58 @@
             </div>
         </form>
     </x-card>
+
+    {{-- Vantagens de marketing (plan_features) — gerenciadas aqui dentro,
+         não numa tela separada (task-11, seção 4). --}}
+    <x-card title="Vantagens exibidas na vitrine" class="max-w-xl mt-6">
+        @if ($plan->features->isEmpty())
+            <x-empty-state message="Nenhuma vantagem cadastrada ainda." />
+        @else
+            <ul class="space-y-2 mb-4">
+                @foreach ($plan->features as $feature)
+                    <li class="flex items-center justify-between gap-2 text-sm">
+                        <div class="flex items-center gap-2">
+                            <div class="flex flex-col">
+                                <form method="POST" action="{{ route('payment-plans.features.move', [$plan, $feature]) }}">
+                                    @csrf
+                                    <input type="hidden" name="direction" value="up">
+                                    <button type="submit" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer leading-none" @disabled($loop->first)>▲</button>
+                                </form>
+                                <form method="POST" action="{{ route('payment-plans.features.move', [$plan, $feature]) }}">
+                                    @csrf
+                                    <input type="hidden" name="direction" value="down">
+                                    <button type="submit" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer leading-none" @disabled($loop->last)>▼</button>
+                                </form>
+                            </div>
+                            <span class="{{ $feature->active ? '' : 'line-through text-gray-400' }}">{{ $feature->label }}</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <form method="POST" action="{{ route('payment-plans.features.update', [$plan, $feature]) }}">
+                                @csrf
+                                @method('PUT')
+                                <input type="hidden" name="label" value="{{ $feature->label }}">
+                                <input type="hidden" name="active" value="{{ $feature->active ? 0 : 1 }}">
+                                <button type="submit" class="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
+                                    {{ $feature->active ? 'Desativar' : 'Ativar' }}
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ route('payment-plans.features.destroy', [$plan, $feature]) }}">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="text-red-600 dark:text-red-400 hover:underline cursor-pointer">Remover</button>
+                            </form>
+                        </div>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+
+        <form method="POST" action="{{ route('payment-plans.features.store', $plan) }}" class="flex items-end gap-2">
+            @csrf
+            <div class="flex-1">
+                <x-form-field label="Nova vantagem" name="label" placeholder="ex: Suporte prioritário" />
+            </div>
+            <button type="submit" class="btn-secondary mb-4">Adicionar</button>
+        </form>
+    </x-card>
 @endsection
