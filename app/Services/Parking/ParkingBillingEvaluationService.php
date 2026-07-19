@@ -6,8 +6,11 @@ use App\Models\CarWash;
 use App\Models\Order;
 use App\Models\ParkingBillingCharge;
 use App\Models\ParkingBillingSetting;
+use App\Notifications\ParkingBillingChargeFlagged;
 use App\Notifications\ParkingBillingChargeGenerated;
+use App\Support\AdminRecipients;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Gratuidade × cobrança do estacionamento + antifraude (task-10,
@@ -60,7 +63,9 @@ class ParkingBillingEvaluationService
         ];
 
         if ($isFree) {
-            ParkingBillingCharge::create([...$chargeData, 'status' => 'free']);
+            $charge = ParkingBillingCharge::create([...$chargeData, 'status' => 'free']);
+
+            $this->notifyIfFlagged($charge);
 
             return;
         }
@@ -98,6 +103,19 @@ class ParkingBillingEvaluationService
         $charge->update(['order_id' => $order->id]);
 
         $owner->notify(new ParkingBillingChargeGenerated($charge));
+        $this->notifyIfFlagged($charge);
+    }
+
+    private function notifyIfFlagged(ParkingBillingCharge $charge): void
+    {
+        if (! $charge->flagged_for_review) {
+            return;
+        }
+
+        Notification::send(
+            AdminRecipients::withPermission('parking-billing-charges.index'),
+            new ParkingBillingChargeFlagged($charge),
+        );
     }
 
     private function closedSessionsCount(CarWash $carWash, Carbon $periodStart, Carbon $periodEnd): int

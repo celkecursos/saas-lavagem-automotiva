@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Payout;
+use App\Notifications\PayoutPaid;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\View\View;
 
 /**
@@ -46,6 +48,9 @@ class PayoutController extends Controller
             'paid_at' => now(),
             'payment_reference' => $validated['payment_reference'],
         ]);
+
+        $owners = $payout->carWash->users()->wherePivot('role', 'owner')->get();
+        Notification::send($owners, new PayoutPaid($payout));
 
         return redirect()->route('payouts.show', $payout)->with('success', 'Repasse marcado como pago.');
     }

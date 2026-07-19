@@ -4,6 +4,9 @@ namespace App\Services\Wash;
 
 use App\Models\CancellationRequest;
 use App\Models\WashRedemption;
+use App\Notifications\NewCancellationRequest;
+use App\Support\AdminRecipients;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Solicitação de cancelamento de lavagem já confirmada (task-8,
@@ -30,12 +33,19 @@ class WashCancellationRequestService
             throw new WashRedemptionValidationException('Já existe uma solicitação de cancelamento pendente pra essa lavagem.');
         }
 
-        return CancellationRequest::create([
+        $request = CancellationRequest::create([
             'requestable_type' => WashRedemption::class,
             'requestable_id' => $redemption->id,
             'requested_by_user_id' => $requestedByUserId,
             'reason' => $reason,
             'status' => 'pending',
         ]);
+
+        Notification::send(
+            AdminRecipients::withPermission('cancellation-requests.approve'),
+            new NewCancellationRequest($request),
+        );
+
+        return $request;
     }
 }

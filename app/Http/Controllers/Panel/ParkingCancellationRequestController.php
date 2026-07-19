@@ -6,8 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\CancellationRequest;
 use App\Models\CarWash;
 use App\Models\ParkingSession;
+use App\Notifications\NewCancellationRequest;
+use App\Support\AdminRecipients;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Solicitação de cancelamento de sessão de estacionamento já fechada
@@ -32,13 +35,18 @@ class ParkingCancellationRequestController extends Controller
 
         $validated = $request->validate(['reason' => ['required', 'string', 'max:2000']]);
 
-        CancellationRequest::create([
+        $cancellationRequest = CancellationRequest::create([
             'requestable_type' => ParkingSession::class,
             'requestable_id' => $parkingSession->id,
             'requested_by_user_id' => $request->user()->id,
             'reason' => $validated['reason'],
             'status' => 'pending',
         ]);
+
+        Notification::send(
+            AdminRecipients::withPermission('cancellation-requests.approve'),
+            new NewCancellationRequest($cancellationRequest),
+        );
 
         return redirect()->route('panel.parking.exit.index')
             ->with('success', 'Solicitação de cancelamento enviada. A plataforma vai analisar.');

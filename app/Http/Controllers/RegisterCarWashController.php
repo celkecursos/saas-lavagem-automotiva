@@ -6,10 +6,13 @@ use App\Http\Requests\RegisterCarWashRequest;
 use App\Models\CarWash;
 use App\Models\User;
 use App\Notifications\CarWashRegistrationReceived;
+use App\Notifications\NewCarWashPendingApproval;
+use App\Support\AdminRecipients;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -64,6 +67,7 @@ class RegisterCarWashController extends Controller
         event(new Registered($user));
 
         $user->notify(new CarWashRegistrationReceived($carWash));
+        Notification::send(AdminRecipients::withPermission('car-washes.approve'), new NewCarWashPendingApproval($carWash));
 
         Auth::login($user);
 

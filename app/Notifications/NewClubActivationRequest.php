@@ -7,9 +7,11 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * Ativação do clube de lavagem aprovada pelo admin (task-5, seção 8).
+ * Pedido de ativação do clube de lavagem aguardando aprovação
+ * (task-19, seção 2) — pros admins com a permission
+ * car-wash-product-subscriptions.approve.
  */
-class ClubActivationApproved extends Notification
+class NewClubActivationRequest extends Notification
 {
     public function __construct(public CarWashProductSubscription $subscription) {}
 
@@ -21,19 +23,18 @@ class ClubActivationApproved extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('Clube de lavagem ativado — Celke Wash Club')
+            ->subject('Novo pedido de ativação do clube de lavagem — Celke Wash Club')
             ->greeting("Olá, {$notifiable->name}!")
-            ->line("O clube de lavagem do \"{$this->subscription->carWash->name}\" foi aprovado e já está ativo.")
-            ->line("Plano de repasse: {$this->subscription->payoutPlan->label}.")
-            ->line('Seu lava-rápido já aparece para os assinantes e pode receber resgates de lavagem.');
+            ->line("\"{$this->subscription->carWash->name}\" solicitou a ativação do clube de lavagem.")
+            ->action('Ver fila de ativação', route('car-wash-product-subscriptions.index'));
     }
 
     public function toArray(object $notifiable): array
     {
         return [
-            'title' => 'Clube de lavagem ativado',
+            'title' => 'Novo pedido de ativação do clube de lavagem',
             'body' => $this->subscription->carWash->name,
-            'url' => route('panel.products.index'),
+            'url' => route('car-wash-product-subscriptions.index'),
         ];
     }
 }

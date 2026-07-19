@@ -7,9 +7,10 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * Payout gerado — avisa o dono do lava-rápido (task-9, seção 5).
+ * Repasse marcado como pago pelo admin (task-19, seção 2) — avisa o
+ * dono do lava-rápido.
  */
-class PayoutGenerated extends Notification
+class PayoutPaid extends Notification
 {
     public function __construct(public Payout $payout) {}
 
@@ -23,10 +24,11 @@ class PayoutGenerated extends Notification
         $amount = number_format($this->payout->total_amount_cents / 100, 2, ',', '.');
 
         return (new MailMessage)
-            ->subject('Você tem um repasse a receber — Celke Wash Club')
+            ->subject('Repasse pago — Celke Wash Club')
             ->greeting("Olá, {$notifiable->name}!")
-            ->line("Você tem R$ {$amount} a receber referente ao período de {$this->payout->period_start->format('d/m/Y')} a {$this->payout->period_end->format('d/m/Y')}.")
-            ->action('Ver detalhes', route('panel.payouts.index'));
+            ->line("O repasse de R$ {$amount} referente ao período de {$this->payout->period_start->format('d/m/Y')} a {$this->payout->period_end->format('d/m/Y')} foi pago.")
+            ->line("Referência: {$this->payout->payment_reference}.")
+            ->action('Ver detalhes', route('panel.payouts.show', $this->payout));
     }
 
     public function toArray(object $notifiable): array
@@ -34,9 +36,9 @@ class PayoutGenerated extends Notification
         $amount = number_format($this->payout->total_amount_cents / 100, 2, ',', '.');
 
         return [
-            'title' => 'Repasse a receber',
+            'title' => 'Repasse pago',
             'body' => "R$ {$amount}",
-            'url' => route('panel.payouts.index'),
+            'url' => route('panel.payouts.show', $this->payout),
         ];
     }
 }

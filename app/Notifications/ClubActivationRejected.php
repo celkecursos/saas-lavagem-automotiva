@@ -15,7 +15,7 @@ class ClubActivationRejected extends Notification
 
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['mail', 'database'];
     }
 
     public function toMail(object $notifiable): MailMessage
@@ -25,5 +25,14 @@ class ClubActivationRejected extends Notification
             ->greeting("Olá, {$notifiable->name}.")
             ->line("A solicitação de ativação do clube de lavagem do \"{$this->subscription->carWash->name}\" não foi aprovada.")
             ->line('Você pode fazer uma nova solicitação pelo painel, em Meus produtos.');
+    }
+
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'title' => 'Ativação do clube de lavagem não aprovada',
+            'body' => $this->subscription->carWash->name,
+            'url' => route('panel.products.index'),
+        ];
     }
 }

@@ -7,6 +7,8 @@ use App\Models\ParkingSession;
 use App\Models\Payout;
 use App\Models\User;
 use App\Models\WashRedemption;
+use App\Notifications\CancellationRequestDecided;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Aprovação/rejeição de cancellation_requests pelo admin (task-9,
@@ -28,6 +30,8 @@ class CancellationRequestResolver
         } elseif ($request->requestable_type === ParkingSession::class) {
             $this->approveParkingSessionCancellation($request->requestable);
         }
+
+        $this->notifyOwners($request);
     }
 
     public function reject(CancellationRequest $request, User $admin): void
@@ -39,6 +43,19 @@ class CancellationRequestResolver
             'resolved_by_user_id' => $admin->id,
             'resolved_at' => now(),
         ]);
+
+        $this->notifyOwners($request);
+    }
+
+    private function notifyOwners(CancellationRequest $request): void
+    {
+        $carWash = $request->requestable_type === WashRedemption::class
+            ? $request->requestable->carWash
+            : $request->requestable->parkingLot->carWash;
+
+        $owners = $carWash->users()->wherePivot('role', 'owner')->get();
+
+        Notification::send($owners, new CancellationRequestDecided($request));
     }
 
     private function approveWashRedemptionCancellation(WashRedemption $redemption): void

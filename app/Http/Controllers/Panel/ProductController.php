@@ -6,8 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\CarWash;
 use App\Models\CarWashProductSubscription;
 use App\Models\PayoutPlan;
+use App\Notifications\NewClubActivationRequest;
+use App\Support\AdminRecipients;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\View\View;
 
 /**
@@ -97,7 +100,7 @@ class ProductController extends Controller
             422,
         );
 
-        CarWashProductSubscription::updateOrCreate(
+        $subscription = CarWashProductSubscription::updateOrCreate(
             ['car_wash_id' => $carWash->id, 'product' => 'clube_lavagem'],
             [
                 'status' => 'pending',
@@ -106,6 +109,11 @@ class ProductController extends Controller
                 'suspended_at' => null,
                 'approved_by' => null,
             ],
+        );
+
+        Notification::send(
+            AdminRecipients::withPermission('car-wash-product-subscriptions.approve'),
+            new NewClubActivationRequest($subscription),
         );
 
         return redirect()->route('panel.products.index')

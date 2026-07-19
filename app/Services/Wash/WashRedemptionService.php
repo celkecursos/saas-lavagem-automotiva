@@ -7,6 +7,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionCycle;
 use App\Models\Vehicle;
 use App\Models\WashRedemption;
+use App\Notifications\WashRedemptionConfirmed;
 use Illuminate\Support\Str;
 
 /**
@@ -122,6 +123,8 @@ class WashRedemptionService
         ]);
 
         $redemption->subscriptionCycle()->increment('quota_used');
+
+        $redemption->subscriptionCycle->subscription->user->notify(new WashRedemptionConfirmed($redemption));
 
         return $redemption;
     }
