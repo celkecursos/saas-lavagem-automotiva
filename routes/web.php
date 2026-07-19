@@ -8,7 +8,9 @@ use App\Http\Controllers\Admin\PaymentGatewayController;
 use App\Http\Controllers\Admin\PayoutController;
 use App\Http\Controllers\Admin\PayoutPlanController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
+use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\PlanFeatureController;
+use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
@@ -165,6 +167,16 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:payout-plans.edit')->name('payout-plans.edit');
     Route::put('/planos-de-repasse/{payout_plan}', [PayoutPlanController::class, 'update'])
         ->middleware('permission:payout-plans.edit')->name('payout-plans.update');
+
+    // Assinantes e pedidos (task-11, seção 4).
+    Route::get('/assinantes', [AdminSubscriptionController::class, 'index'])
+        ->middleware('permission:users.index')->name('subscriptions.index');
+    Route::get('/assinantes/{subscription}', [AdminSubscriptionController::class, 'show'])
+        ->middleware('permission:users.index')->name('subscriptions.show');
+    Route::get('/pedidos', [OrderController::class, 'index'])
+        ->middleware('permission:orders.index')->name('orders.index');
+    Route::get('/pedidos/{order}', [OrderController::class, 'show'])
+        ->middleware('permission:orders.show')->name('orders.show');
 
     // Fila de aprovação de lava-rápidos (task-5, seção 4).
     Route::get('/lava-rapidos', [CarWashController::class, 'index'])
