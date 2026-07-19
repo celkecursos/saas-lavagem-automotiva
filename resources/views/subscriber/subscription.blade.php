@@ -51,6 +51,24 @@
                     </x-confirm-modal>
                 </div>
             @endif
+
+            @if ($orders->isNotEmpty())
+                <x-card title="Histórico de pedidos" class="mt-4">
+                    <ul class="divide-y divide-gray-200 dark:divide-gray-800 text-sm">
+                        @foreach ($orders as $order)
+                            <li class="py-2 flex items-center justify-between">
+                                <a href="{{ route('order.show', $order) }}" class="text-blue-600 dark:text-blue-400 hover:underline">
+                                    Pedido #{{ $order->id }} — {{ $order->created_at->format('d/m/Y') }}
+                                </a>
+                                <span class="flex items-center gap-2">
+                                    <span class="text-gray-500 dark:text-gray-400">R$ {{ number_format($order->amount_cents / 100, 2, ',', '.') }}</span>
+                                    <x-badge :status="$order->status" />
+                                </span>
+                            </li>
+                        @endforeach
+                    </ul>
+                </x-card>
+            @endif
         @endif
     </div>
 @endsection

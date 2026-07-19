@@ -18,8 +18,9 @@ class SubscriptionController extends Controller
     public function show(Request $request): View
     {
         $subscription = $this->currentSubscription($request);
+        $orders = $subscription?->orders()->latest('created_at')->get() ?? collect();
 
-        return view('subscriber.subscription', compact('subscription'));
+        return view('subscriber.subscription', compact('subscription', 'orders'));
     }
 
     /**

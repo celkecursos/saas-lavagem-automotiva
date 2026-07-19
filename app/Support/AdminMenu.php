@@ -105,6 +105,20 @@ class AdminMenu
                     ->count(),
             ],
             [
+                'label' => 'Reembolsos pendentes',
+                'route' => 'order-refund-requests.index',
+                'permission' => 'order-refund-requests.index',
+                'badge' => fn (): int => DB::table('order_refund_requests')
+                    ->where('status', 'failed_manual')
+                    ->count(),
+            ],
+            [
+                'label' => 'Configurações de reembolso',
+                'route' => 'refund-settings.edit',
+                'permission' => 'refund-settings.edit',
+                'badge' => null,
+            ],
+            [
                 'label' => 'Auditoria',
                 'route' => 'audits.index',
                 'permission' => 'audits.index',

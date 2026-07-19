@@ -13,6 +13,8 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\RolePermissionController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\OrderRefundRequestController;
+use App\Http\Controllers\Admin\RefundSettingController;
 use App\Http\Controllers\Admin\PlanFeatureController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\CheckoutController;
@@ -37,6 +39,7 @@ use App\Http\Controllers\Panel\WashHistoryController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OrderController as SubscriberOrderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\RegisterCarWashController;
@@ -146,6 +149,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/lavagem/{wash_redemption}/avaliar', [WashController::class, 'rate'])->name('wash.rate');
     Route::post('/lavagem/{wash_redemption}/solicitar-cancelamento', [WashController::class, 'requestCancellation'])
         ->name('wash.request-cancellation');
+
+    // Pedido do assinante + reembolso self-service (task-21, seção 2,
+    // passo 1). Nome no singular ('order.*') pra não colidir com o
+    // 'orders.*' do admin — mesmo truque de subscription.show/subscriptions.index.
+    Route::get('/pedidos/{order}', [SubscriberOrderController::class, 'show'])->name('order.show');
+    Route::post('/pedidos/{order}/solicitar-reembolso', [SubscriberOrderController::class, 'requestRefund'])
+        ->name('order.request-refund');
 });
 
 // Webhook de pagamento — genérico por gateway (task-4/task-7, seção 3).
@@ -201,6 +211,19 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:orders.index')->name('orders.index');
     Route::get('/pedidos/{order}', [OrderController::class, 'show'])
         ->middleware('permission:orders.show')->name('orders.show');
+    Route::post('/pedidos/{order}/reembolsar', [OrderController::class, 'refund'])
+        ->middleware('permission:orders.refund')->name('orders.refund');
+
+    // Fila de reembolsos não processados via API + config da janela
+    // estendida (task-21, seção 4).
+    Route::get('/reembolsos-pendentes', [OrderRefundRequestController::class, 'index'])
+        ->middleware('permission:order-refund-requests.index')->name('order-refund-requests.index');
+    Route::post('/reembolsos-pendentes/{order_refund_request}/marcar-processado', [OrderRefundRequestController::class, 'markProcessed'])
+        ->middleware('permission:order-refund-requests.mark-processed')->name('order-refund-requests.mark-processed');
+    Route::get('/configuracoes-reembolso', [RefundSettingController::class, 'edit'])
+        ->middleware('permission:refund-settings.edit')->name('refund-settings.edit');
+    Route::put('/configuracoes-reembolso', [RefundSettingController::class, 'update'])
+        ->middleware('permission:refund-settings.edit')->name('refund-settings.update');
 
     // Auditoria (task-11, seção 4).
     Route::get('/auditoria', [AuditController::class, 'index'])

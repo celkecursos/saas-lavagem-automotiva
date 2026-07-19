@@ -25,4 +25,28 @@
             <div><dt class="inline font-medium">Criado em:</dt> <dd class="inline">{{ $order->created_at->format('d/m/Y H:i') }}</dd></div>
         </dl>
     </x-card>
+
+    @if ($order->refundRequest)
+        <x-card title="Reembolso" class="mt-4">
+            <dl class="text-sm space-y-2 text-gray-700 dark:text-gray-300">
+                <div><dt class="inline font-medium">Status:</dt> <dd class="inline"><x-badge :status="$order->refundRequest->status" /></dd></div>
+                <div><dt class="inline font-medium">Solicitado por:</dt> <dd class="inline">{{ $order->refundRequest->requestedBy->name }} ({{ $order->refundRequest->initiated_by === 'admin' ? 'admin' : 'self-service' }})</dd></div>
+                <div><dt class="inline font-medium">Motivo:</dt> <dd class="inline">{{ $order->refundRequest->reason }}</dd></div>
+                @if ($order->refundRequest->processed_at)
+                    <div><dt class="inline font-medium">Processado em:</dt> <dd class="inline">{{ $order->refundRequest->processed_at->format('d/m/Y H:i') }}</dd></div>
+                @endif
+            </dl>
+        </x-card>
+    @elseif ($order->status === 'paid' && auth()->user()->can('orders.refund'))
+        <x-card title="Reembolso" class="mt-4">
+            <form method="POST" action="{{ route('orders.refund', $order) }}">
+                @csrf
+                <x-form-field label="Motivo do reembolso" name="reason">
+                    <textarea name="reason" id="reason" rows="3" required
+                              class="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-backgroundthirddark text-gray-900 dark:text-gray-100 text-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                </x-form-field>
+                <button type="submit" class="btn-danger">Reembolsar</button>
+            </form>
+        </x-card>
+    @endif
 @endsection
