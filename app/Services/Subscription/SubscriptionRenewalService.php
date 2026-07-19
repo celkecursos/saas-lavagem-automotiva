@@ -9,6 +9,7 @@ use App\Models\SubscriptionCycle;
 use App\Notifications\SubscriptionCanceled;
 use App\Notifications\SubscriptionRenewalFailed;
 use App\Notifications\SubscriptionRenewed;
+use App\Services\Loyalty\AchievementChecker;
 use App\Services\Payment\PaymentGatewayFactory;
 use App\Services\Referral\ReferralRewardGranter;
 use Illuminate\Support\Carbon;
@@ -62,7 +63,7 @@ class SubscriptionRenewalService
             'payment_gateway_id' => $activeGateway->id,
             'payable_type' => Subscription::class,
             'payable_id' => $subscription->id,
-            'amount_cents' => $subscription->plan->price_cents,
+            'amount_cents' => $this->renewalAmountCents($subscription),
             'currency' => 'BRL',
             'recurring_type' => 'subsequent',
             'status' => 'pending',
@@ -89,6 +90,24 @@ class SubscriptionRenewalService
         ]);
 
         $this->handleFailure($subscription);
+    }
+
+    /**
+     * Desconto de fidelidade (task-20, seção 4) resgatado na loja —
+     * aplicado no cálculo do PRÓXIMO order de renovação, zerado logo
+     * abaixo em handleSuccess() pra não acumular.
+     */
+    private function renewalAmountCents(Subscription $subscription): int
+    {
+        $price = $subscription->plan->price_cents;
+
+        if ($subscription->pending_renewal_discount_percent === null) {
+            return $price;
+        }
+
+        $discount = (float) $subscription->pending_renewal_discount_percent;
+
+        return (int) round($price * (1 - $discount / 100));
     }
 
     private function handleSuccess(Subscription $subscription): void
@@ -120,6 +139,7 @@ class SubscriptionRenewalService
             'current_period_start' => $previousPeriodEnd,
             'current_period_end' => $newPeriodEnd,
             'pending_plan_id' => null,
+            'pending_renewal_discount_percent' => null,
         ]);
 
         $cycle = SubscriptionCycle::create([
@@ -135,6 +155,8 @@ class SubscriptionRenewalService
         ReferralRewardGranter::grantPendingRewardsFor($cycle);
 
         $subscription->user->notify(new SubscriptionRenewed($subscription->fresh()));
+
+        AchievementChecker::checkMembershipAnniversary($subscription->user);
     }
 
     private function handleFailure(Subscription $subscription): void

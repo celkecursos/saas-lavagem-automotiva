@@ -5,6 +5,7 @@ namespace App\Services\Referral;
 use App\Models\ReferralReward;
 use App\Models\SubscriptionCycle;
 use App\Notifications\ReferralRewardGranted;
+use App\Services\Loyalty\AchievementChecker;
 
 /**
  * Concede bônus de indicação toda vez que um subscription_cycles novo
@@ -39,6 +40,8 @@ class ReferralRewardGranter
             ]);
         }
 
-        $cycle->subscription->user->notify(new ReferralRewardGranted($rewards->count()));
+        $referrer = $cycle->subscription->user;
+        $referrer->notify(new ReferralRewardGranted($rewards->count()));
+        AchievementChecker::checkReferrals($referrer);
     }
 }

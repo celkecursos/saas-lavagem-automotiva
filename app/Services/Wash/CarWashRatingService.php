@@ -4,6 +4,7 @@ namespace App\Services\Wash;
 
 use App\Models\CarWashRating;
 use App\Models\WashRedemption;
+use App\Services\Loyalty\AchievementChecker;
 
 /**
  * Avaliação pós-lavagem (task-8, seção 2, passo 7) — alimenta
@@ -29,6 +30,8 @@ class CarWashRatingService
         );
 
         $this->recalculateSatisfactionScore($redemption->car_wash_id);
+
+        AchievementChecker::checkRatings($redemption->subscriptionCycle->subscription->user);
 
         return $rating;
     }

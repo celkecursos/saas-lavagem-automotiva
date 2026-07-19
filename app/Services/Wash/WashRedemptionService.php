@@ -8,6 +8,7 @@ use App\Models\SubscriptionCycle;
 use App\Models\Vehicle;
 use App\Models\WashRedemption;
 use App\Notifications\WashRedemptionConfirmed;
+use App\Services\Loyalty\AchievementChecker;
 use Illuminate\Support\Str;
 
 /**
@@ -124,7 +125,9 @@ class WashRedemptionService
 
         $redemption->subscriptionCycle()->increment('quota_used');
 
-        $redemption->subscriptionCycle->subscription->user->notify(new WashRedemptionConfirmed($redemption));
+        $user = $redemption->subscriptionCycle->subscription->user;
+        $user->notify(new WashRedemptionConfirmed($redemption));
+        AchievementChecker::checkWashMilestones($user);
 
         return $redemption;
     }
