@@ -52,6 +52,19 @@ class CarWash extends Model implements Auditable
         return $this->hasMany(ParkingLot::class);
     }
 
+    /**
+     * Lavagens 'completed' no período — mesma fonte usada no repasse
+     * da task-9, reaproveitada na monetização do estacionamento
+     * (task-10, seção 5).
+     */
+    public function washRedemptionsCompletedBetween(\Illuminate\Support\Carbon $start, \Illuminate\Support\Carbon $end): int
+    {
+        return WashRedemption::where('car_wash_id', $this->id)
+            ->where('status', 'completed')
+            ->whereBetween('redeemed_at', [$start, $end])
+            ->count();
+    }
+
     protected function casts(): array
     {
         return [

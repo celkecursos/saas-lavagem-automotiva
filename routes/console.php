@@ -19,3 +19,7 @@ Schedule::command('wash-redemptions:expire')->everyMinute();
 // Geração dos lotes de repasse (task-9, seção 2) — todo dia 1º,
 // cobrindo o período anterior.
 Schedule::command('payouts:generate')->monthlyOn(1, '02:00');
+
+// Avaliação de cobrança do estacionamento (task-10, seção 5) — todo
+// dia 1º, cobrindo o período anterior.
+Schedule::command('parking-billing:evaluate')->monthlyOn(1, '03:00');
