@@ -10,6 +10,7 @@ use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
+use App\Http\Controllers\Panel\PayoutController as PanelPayoutController;
 use App\Http\Controllers\Panel\ProductController as PanelProductController;
 use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
 use App\Http\Controllers\Panel\TeamController as PanelTeamController;
@@ -213,6 +214,10 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
     Route::get('/lavagens', [WashHistoryController::class, 'index'])->name('panel.washes.index');
     Route::post('/lavagens/{wash_redemption}/solicitar-cancelamento', [WashHistoryController::class, 'requestCancellation'])
         ->name('panel.washes.request-cancellation');
+
+    // Repasses recebidos (task-9, seção 4).
+    Route::get('/repasses', [PanelPayoutController::class, 'index'])->name('panel.payouts.index');
+    Route::get('/repasses/{payout}', [PanelPayoutController::class, 'show'])->name('panel.payouts.show');
 });
 
 // Aceite público de convite de equipe (task-5, seção 6).
