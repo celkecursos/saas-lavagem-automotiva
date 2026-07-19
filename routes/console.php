@@ -15,3 +15,7 @@ Schedule::command('subscriptions:renew')->daily();
 
 // Expiração de códigos de resgate vencidos (task-8, seção 2, passo 5).
 Schedule::command('wash-redemptions:expire')->everyMinute();
+
+// Geração dos lotes de repasse (task-9, seção 2) — todo dia 1º,
+// cobrindo o período anterior.
+Schedule::command('payouts:generate')->monthlyOn(1, '02:00');
