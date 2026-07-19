@@ -19,6 +19,7 @@ use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
+use App\Http\Controllers\Panel\ParkingEntryController;
 use App\Http\Controllers\Panel\ParkingLotController;
 use App\Http\Controllers\Panel\ParkingRateController;
 use App\Http\Controllers\Panel\PayoutController as PanelPayoutController;
@@ -332,6 +333,8 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
         Route::post('/', [ParkingLotController::class, 'store'])->name('panel.parking.lot.store');
         Route::get('/tarifas', [ParkingRateController::class, 'index'])->name('panel.parking.rates.index');
         Route::post('/tarifas', [ParkingRateController::class, 'store'])->name('panel.parking.rates.store');
+        Route::get('/entrada', [ParkingEntryController::class, 'create'])->name('panel.parking.entry.create');
+        Route::post('/entrada', [ParkingEntryController::class, 'store'])->name('panel.parking.entry.store');
     });
 });
 
