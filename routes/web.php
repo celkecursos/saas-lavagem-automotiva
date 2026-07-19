@@ -23,6 +23,7 @@ use App\Http\Controllers\Panel\ParkingEntryController;
 use App\Http\Controllers\Admin\ParkingBillingChargeController as AdminParkingBillingChargeController;
 use App\Http\Controllers\Admin\ParkingBillingSettingController;
 use App\Http\Controllers\Panel\ParkingBillingChargeController;
+use App\Http\Controllers\Panel\ParkingReportController;
 use App\Http\Controllers\Panel\ParkingCancellationRequestController;
 use App\Http\Controllers\Panel\ParkingExitController;
 use App\Http\Controllers\Panel\ParkingLotController;
@@ -357,6 +358,7 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
         Route::get('/cobrancas', [ParkingBillingChargeController::class, 'index'])->name('panel.parking.charges.index');
         Route::get('/cobrancas/{charge}/pagar', [ParkingBillingChargeController::class, 'checkout'])->name('panel.parking.charges.checkout');
         Route::post('/cobrancas/{charge}/pagar', [ParkingBillingChargeController::class, 'pay'])->name('panel.parking.charges.pay');
+        Route::get('/relatorio', [ParkingReportController::class, 'index'])->name('panel.parking.report');
     });
 });
 
