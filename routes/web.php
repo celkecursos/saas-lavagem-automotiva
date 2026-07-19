@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\PayoutController;
 use App\Http\Controllers\Admin\PayoutPlanController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\RolePermissionController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\PlanFeatureController;
@@ -213,6 +214,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:permissions.edit')->name('permissions.update');
     Route::delete('/permissions/{permission}', [PermissionController::class, 'destroy'])
         ->middleware('permission:permissions.destroy')->name('permissions.destroy');
+
+    Route::get('/role-permissions/{role}', [RolePermissionController::class, 'index'])
+        ->middleware('permission:role-permissions.index')->name('role-permissions.index');
+    Route::post('/role-permissions/{role}/{permission}', [RolePermissionController::class, 'update'])
+        ->middleware('permission:role-permissions.update')->name('role-permissions.update');
 
     // Fila de aprovação de lava-rápidos (task-5, seção 4).
     Route::get('/lava-rapidos', [CarWashController::class, 'index'])
