@@ -1,0 +1,230 @@
+TASK 24 - Localização pt-BR e personalização das telas de autenticação
+================================================================================
+
+OBJETIVO
+--------
+Deixar o Laravel falando português do Brasil (mensagens de validação,
+autenticação, recuperação de senha e paginação) usando uma biblioteca
+pronta em vez de traduzir arquivo por arquivo na mão, e substituir as
+telas de login/cadastro/recuperação de senha que vêm cruas do Breeze por
+telas com a identidade visual do Celke Wash Club.
+
+Depende da task-1 (projeto criado com Breeze) e da task-6 (paleta de
+cores + logo em public/images/logo.png). Pode ser executada logo depois
+da task-6, ou mais tarde — nada nas tasks seguintes depende dela, mas
+quanto antes, menos tela em inglês aparece durante o desenvolvimento.
+
+
+1. INSTALAR A BIBLIOTECA DE TRADUÇÃO
+------------------------------------------------
+Biblioteca: lucascudo/laravel-pt-BR-localization
+https://github.com/lucascudo/laravel-pt-BR-localization
+
+É só um pacote de arquivos de tradução — não tem service provider com
+lógica, não registra rota, não tem impacto em performance. O único papel
+dele é publicar os arquivos de idioma prontos.
+
+  ./vendor/bin/sail composer require lucascudo/laravel-pt-BR-localization
+  ./vendor/bin/sail artisan vendor:publish --tag=laravel-pt-br-localization
+
+ATENÇÃO (Windows + Sail): se o composer reclamar de "dubious ownership"
+ou "composer.json is not writable", rode como root dentro do container:
+
+  docker compose exec -u root laravel.test bash -c \
+    "git config --global --add safe.directory /var/www/html && \
+     composer require lucascudo/laravel-pt-BR-localization"
+
+Isso é um atrito do mount do Windows no WSL, não um problema do pacote.
+
+O publish cria:
+
+  lang/pt_BR.json          ~196 strings soltas (as do Breeze inclusive)
+  lang/pt_BR/auth.php      mensagens de login/throttle
+  lang/pt_BR/passwords.php recuperação de senha
+  lang/pt_BR/validation.php todas as regras + 'attributes'
+  lang/pt_BR/pagination.php "Anterior"/"Próxima"
+
+
+2. APONTAR O APP PRO pt_BR
+------------------------------------
+Em .env E .env.example (os dois — quem clonar o projeto usa o example):
+
+  APP_NAME="Celke Wash Club"
+  APP_LOCALE=pt_BR
+  APP_FALLBACK_LOCALE=en
+  APP_FAKER_LOCALE=pt_BR
+
+E em config/app.php trocar os DEFAULTS, não só o .env — assim quem rodar
+os testes ou um comando sem .env carregado continua em português:
+
+  'locale' => env('APP_LOCALE', 'pt_BR'),
+  'faker_locale' => env('APP_FAKER_LOCALE', 'pt_BR'),
+
+Manter fallback_locale = 'en' de propósito: as traduções JSON usam a
+frase em inglês COMO chave, então se faltar alguma tradução o texto cai
+na frase original em inglês em vez de mostrar a chave crua na tela.
+
+APP_FAKER_LOCALE=pt_BR faz as factories gerarem nome/endereço/empresa
+brasileiros — melhora muito a aparência do seed de demonstração.
+
+Depois: ./vendor/bin/sail artisan config:clear
+
+
+3. ATRIBUTOS DE VALIDAÇÃO DO PROJETO
+----------------------------------------------
+O 'attributes' do validation.php publicado já traz ~45 campos comuns
+(nome, senha, telefone, estado...), mas não os específicos deste
+domínio. Acrescentar no FINAL do array 'attributes' em
+lang/pt_BR/validation.php:
+
+  'email' => 'e-mail',
+  'cpf' => 'CPF',
+  'document' => 'CNPJ',
+  'referral_code' => 'código de indicação',
+  'address_line' => 'endereço',
+  'zip_code' => 'CEP',
+  'plan_id' => 'plano',
+  'car_wash_id' => 'lava-rápido',
+  'score' => 'nota',
+  'label' => 'descrição',
+  'reason' => 'motivo',
+
+Sem isso a mensagem sai "O campo email é obrigatório" (sem hífen) ou
+"O campo car_wash_id é obrigatório" (nome de coluna vazando pro usuário).
+
+DEIXAR UM COMENTÁRIO no arquivo avisando que rodar vendor:publish --force
+de novo sobrescreve o arquivo e apaga este bloco.
+
+Como conferir que pegou:
+
+  ./vendor/bin/sail artisan tinker --execute='
+    $v = Validator::make(["email"=>""], ["email"=>"required"]);
+    echo $v->errors()->first();'
+
+  Esperado: "O campo e-mail é obrigatório."
+
+
+4. NOVO SHELL DAS TELAS DE AUTENTICAÇÃO
+-------------------------------------------------
+O layouts/guest.blade.php que vem do Breeze tem três problemas: usa o
+logo genérico <x-application-logo> (a folha do Laravel), puxa a fonte
+Figtree de um CDN externo (fonts.bunny.net) em vez das fontes locais que
+o resto do projeto usa, e é um card cinza centralizado sem nenhuma
+identidade.
+
+Reescrever resources/views/layouts/guest.blade.php como split screen:
+
+  - Grid de 2 colunas em lg+; 1 coluna (só o formulário) no mobile.
+  - Coluna ESQUERDA (escondida com "hidden lg:flex"): fundo
+    bg-backgroundsecond, dois brilhos decorativos em CSS pure
+    (div absoluta + rounded-full + blur-3xl), logo real do projeto
+    (public/images/logo.png) no topo, headline curta com gradiente
+    from-blue-400 to-cyan-300 em bg-clip-text, 3 bullets com check SVG
+    e o copyright no rodapé.
+  - Coluna DIREITA: formulário com max-w-md centralizado, e a logo
+    repetida em cima do form APENAS no mobile (lg:hidden), já que o
+    painel de marca some nessa largura.
+  - Link "← Voltar para o site" no rodapé da coluna do formulário.
+  - Trocar o <head> inline pelo @include('layouts.partials.head'), pra
+    herdar fontes locais, favicon e dark mode do resto do projeto.
+
+Slots nomeados pra cada tela preencher:
+
+  <x-slot:heading>    título grande da tela
+  <x-slot:subheading> linha de apoio
+
+Renderizados no layout com @isset($heading) / @isset($subheading), então
+tela que não define nenhum dos dois continua funcionando.
+
+TÍTULO DA ABA — pegadinha: as telas de auth são COMPONENTE
+(<x-guest-layout>), não @extends, então @section('title') não existe e o
+@yield('title') do head cai sempre no default. Solução:
+
+  a) app/View/Components/GuestLayout.php ganha um prop:
+       public function __construct(public ?string $title = null) {}
+
+  b) guest.blade.php passa isso pro partial:
+       @include('layouts.partials.head', ['pageTitle' => $title ?? config('app.name')])
+
+  c) head.blade.php passa a decidir entre os dois:
+       @isset($pageTitle)
+           <title>{{ $pageTitle }}</title>
+       @else
+           <title>@yield('title', config('app.name'))</title>
+       @endisset
+
+  d) cada tela: <x-guest-layout title="Entrar — Celke Wash Club">
+
+
+5. TRADUZIR E REDESENHAR AS TELAS
+--------------------------------------------
+Escrever o texto em português DIRETO na view, sem __(), para o conteúdo
+que é copy do produto ("Entrar na sua conta", "Leva menos de um minuto").
+Motivo: o projeto é monolíngue pt-BR; passar copy de marketing por
+arquivo de tradução só adiciona indireção. O __() continua valendo pro
+que vem do framework (mensagens de validação, auth.failed etc.), e essas
+já estão traduzidas pela biblioteca da seção 1.
+
+Telas a reescrever (todas em resources/views/auth/, exceto o registro):
+
+  login.blade.php
+    heading "Entrar na sua conta"; campos E-mail e Senha com
+    placeholder; link "Esqueceu a senha?" na MESMA LINHA do label de
+    senha (não jogado no rodapé como no Breeze); checkbox "Manter
+    conectado"; botão full-width azul; rodapé "Ainda não tem conta?
+    Criar conta".
+
+  forgot-password.blade.php
+    heading "Recuperar senha"; explicação no subheading (no Breeze isso
+    é um parágrafo solto acima do form); botão "Enviar link de
+    recuperação"; rodapé "Lembrou a senha? Entrar".
+
+  reset-password.blade.php
+    heading "Cadastrar nova senha"; campos "Nova senha" e "Confirmar
+    nova senha"; botão "Salvar nova senha".
+
+  confirm-password.blade.php
+    heading "Confirmar senha"; botão "Confirmar".
+
+  verify-email.blade.php
+    heading "Confirme seu e-mail"; usa .alert-success (task-6) pro
+    status 'verification-link-sent'; botão "Reenviar e-mail de
+    confirmação" + link "Sair".
+
+  subscriber/register.blade.php (o cadastro do assinante da task-7)
+    Migrar de @extends('layouts.public') para <x-guest-layout>, pra que
+    entrar / cadastrar / recuperar senha fiquem no mesmo shell visual.
+    Mantém os mesmos <x-form-field> e o mesmo action route('register.store')
+    — só muda o invólucro e o botão passa a ser full-width.
+
+Padrão do botão primário nessas telas (não usa .btn-primary porque
+precisa ser full-width e mais alto que o botão padrão de tabela):
+
+  class="w-full rounded-lg bg-blue-500 px-4 py-3 text-sm font-semibold
+         text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-600"
+
+
+6. TESTES
+--------------
+Os testes de autenticação que vêm do Breeze (tests/Feature/Auth/*) NÃO
+precisam mudar: eles testam POST e redirect, não o HTML. Rodar a suíte
+inteira depois da mudança pra confirmar.
+
+Vale conferir manualmente (ou com um teste de smoke) que:
+  - /login, /forgot-password e /registro respondem 200
+  - o <title> de cada uma é o esperado (valida o mecanismo da seção 4c)
+  - a logo do projeto aparece no HTML (asset('images/logo.png'))
+
+
+COMMITS SUGERIDOS PARA ESTA TASK
+-------------------------------------
+  1. "feat(i18n): instala lucascudo/laravel-pt-BR-localization e aponta o app pro pt_BR"
+  2. "feat(i18n): atributos de validacao do dominio em pt_BR"
+  3. "feat(auth): novo shell das telas de autenticacao com a logo do projeto"
+  4. "feat(auth): telas de login, cadastro e recuperacao de senha em portugues"
+
+
+PRÓXIMOS PASSOS
+--------------------
+Ver orientacao.txt para o índice completo das tasks e a ordem de
+execução recomendada.

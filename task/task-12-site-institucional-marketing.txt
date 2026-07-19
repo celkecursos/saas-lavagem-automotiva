@@ -197,6 +197,72 @@ entre CTA primário (assinante) e secundário (parceria) já é resolvida
 pelas classes existentes (.btn-primary vs .btn-secondary), sem precisar
 inventar uma terceira cor de "marca do site".
 
+6.1 ACABAMENTO DA HOME (não deixar "empilhado")
+- - - - - - - - - - - - - - - - - - - - - - - - - -
+Montar as 6 seções da seção 2 com o mesmo peso visual, mesma largura e
+mesmo espaçamento resulta numa página que parece uma lista de blocos
+jogados. O que resolve, sem sair do Tailwind e sem asset novo:
+
+RITMO E HIERARQUIA
+  - Alternar o fundo das seções: bg-gray-50 / bg-white (e os pares dark
+    correspondentes) em seções vizinhas. Sem isso nada delimita onde
+    uma seção termina.
+  - Espaçamento generoso e CONSTANTE: py-20 lg:py-24 em toda seção de
+    conteúdo. Seção com py diferente das outras chama atenção sem
+    motivo.
+  - Todo bloco com o mesmo cabeçalho de 3 partes: kicker (texto curto
+    maiúsculo azul, ex "Planos"), h2 grande, parágrafo de apoio. É o
+    que faz o olho reconhecer "começou uma seção nova".
+  - max-w-6xl mx-auto px-4 em todas — largura inconsistente entre
+    seções é o que mais dá sensação de página remendada.
+
+HERO
+  - Duas colunas em lg+: texto à esquerda, elemento visual à direita.
+    Hero de coluna única e texto centralizado é o padrão que mais
+    parece template genérico.
+  - Brilhos de fundo em CSS puro (div absoluta + rounded-full +
+    bg-blue-600/20 + blur-3xl), sem imagem.
+  - Palavra-chave da headline com gradiente:
+    bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent
+  - Do lado direito, um MOCKUP do produto (card com o código de
+    lavagem, badge "Ativo", barra de progresso de lavagens restantes)
+    montado em HTML. Mostra o que o assinante vai receber sem depender
+    de foto de banco de imagem — que é o que normalmente entrega que o
+    site é template.
+  - Faixa de 3 números embaixo (parceiros na rede, taxa de adesão,
+    tempo de resgate), separada por border-t.
+
+O RESTO
+  - "Como funciona": ícones SVG (Heroicons, mesmo critério da task-14
+    seção 2.1) em caixas arredondadas, NÃO emoji 1️⃣2️⃣3️⃣ — emoji
+    renderiza diferente em cada sistema e parece rascunho.
+  - Planos: card do meio destacado (borda azul de 2px, md:-mt-4,
+    shadow-xl, selo "Mais vendido" absolute em cima) — ver task-7,
+    seção 2.1 pro critério de qual destacar. Vantagens com check SVG,
+    não "✓" em texto.
+  - Lava-rápidos: cada card com um círculo de inicial em gradiente
+    (mb_substr do nome) + ícone de localização. Resolve o card vazio
+    sem precisar de logo de cada parceiro.
+  - FAQ: um único bloco com border + divide-y, chevron que gira com
+    :class="open === N && 'rotate-180'". ATENÇÃO: x-collapse exige o
+    plugin @alpinejs/collapse, que NÃO está instalado — usar
+    x-transition, ou instalar o plugin.
+  - Parceria: a mesma copy da seção 2, mas dentro de um card
+    horizontal (texto à esquerda, botão à direita) em vez de bloco
+    centralizado — reforça que é secundário sem escondê-lo.
+
+HEADER E FOOTER (layouts/public.blade.php)
+  - Header sticky top-0 z-40 com bg-.../95 + backdrop-blur.
+  - Menu mobile de verdade: no layout original os links de navegação
+    simplesmente sumiam abaixo de md, sem substituto. Botão hambúrguer
+    com x-data="{ mobile: false }" abrindo a mesma lista empilhada.
+  - Footer com py-14, e o copyright numa faixa própria separada por
+    border-t em vez de espremido na primeira coluna.
+
+E aplicar o MESMO desenho de card de plano na tela /planos (task-7,
+seção 2) — home e vitrine com dois visuais diferentes pro mesmo objeto
+é o tipo de inconsistência que o usuário percebe na hora.
+
 
 COMMITS SUGERIDOS PARA ESTA TASK
 -------------------------------------
@@ -205,6 +271,8 @@ COMMITS SUGERIDOS PARA ESTA TASK
   3. "feat(site): seção secundária de parceria (discreta) + páginas institucionais"
      (sobre, termos, privacidade, contato)
   4. "feat(site): SEO (meta tags, Open Graph, sitemap.xml, robots.txt)"
+  5. "feat(site): acabamento visual da home (hero em 2 colunas, ícones SVG, plano em destaque)"
+  6. "feat(site): header sticky com menu mobile e footer reorganizado"
 
 
 PRÓXIMOS PASSOS

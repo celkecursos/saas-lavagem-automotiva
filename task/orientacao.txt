@@ -2,7 +2,7 @@ ORIENTAÇÃO GERAL - SaaS Celke Wash Club (lavagem automotiva)
 ========================================================================
 
 Este arquivo é o ponto de partida para quem for executar as tasks deste
-diretório (task-1 até task-23). Antes de abrir a task-1, confira que
+diretório (task-1 até task-24). Antes de abrir a task-1, confira que
 todos os pré-requisitos abaixo estão prontos.
 
 Ao final da task-1 (Passo 5), este arquivo e todas as tasks são
@@ -105,6 +105,7 @@ As tasks têm dependência entre si — seguir esta ordem evita retrabalho
   task-20 -> fidelidade e gamificação (pontos, conquistas, loja)
   task-12 -> site institucional/marketing (Celke Wash Club)
   task-17 -> ranking público "Lava-rápido do mês"
+  task-24 -> localização pt-BR + telas de autenticação personalizadas
 
   (task-2, visão de domínio, é só leitura/contexto — não tem código,
   vale ler antes de tudo pra entender o modelo de negócio)

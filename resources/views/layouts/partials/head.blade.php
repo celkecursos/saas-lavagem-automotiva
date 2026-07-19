@@ -2,7 +2,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<title>@yield('title', config('app.name'))</title>
+{{-- $pageTitle: usado pelos layouts que são componente (guest/auth), onde
+     @section('title') não existe; os layouts com @extends caem no @yield. --}}
+@isset($pageTitle)
+    <title>{{ $pageTitle }}</title>
+@else
+    <title>@yield('title', config('app.name'))</title>
+@endisset
 {{-- SEO/Open Graph (task-12, seção 5) — cada página pública define o
      próprio @section('meta_description'/'og_image'); sem isso, cai no
      texto/imagem padrão voltados pro consumidor final. --}}

@@ -90,6 +90,43 @@ Route::has($item['route']) E auth()->user()->can($item['permission'])
 — as duas checagens, nessa ordem (rota primeiro, mais barata). Isso
 resolve o "ATENÇÃO DE ORDEM" do topo deste arquivo.
 
+2.1 ÍCONE EM CADA ITEM DO MENU
+- - - - - - - - - - - - - - - - - -
+Uma sidebar com ~20 itens só de texto vira um paredão difícil de
+escanear. Cada item ganha uma quarta chave, 'icon', com O ATRIBUTO "d"
+de um path do Heroicons outline (24x24, stroke) — só o "d", sem markup:
+
+  ['label' => 'Pedidos', 'route' => 'orders.index',
+   'permission' => 'orders.index', 'badge' => null,
+   'icon' => 'M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993...']
+
+Por que só o "d" e não o <svg> inteiro: quem decide tamanho, cor e
+estado (ativo/hover) é o layout, não o array de config. Ícone que já
+vem com class="w-5 h-5 text-gray-400" embutido obriga a editar 20
+strings pra mudar o tamanho da sidebar. Ícones com mais de um traço
+concatenam os subpaths no mesmo "d" (path SVG aceita vários "M").
+
+Não instalar pacote de ícones pra isso — são ~20 paths copiados uma vez
+do heroicons.com, sem dependência nova nem passo de build.
+
+A view monta o <svg> em volta:
+
+  <svg class="h-5 w-5 shrink-0 {{ $isActive ? 'text-blue-400'
+              : 'text-gray-500 group-hover:text-gray-300' }}"
+       fill="none" stroke="currentColor" stroke-width="1.6"
+       viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}" />
+  </svg>
+
+O link vira "group flex items-center gap-3" (com o label em
+<span class="flex-1"> pra empurrar o badge pra direita), e o ícone do
+item ativo fica azul — reforça o estado ativo além do fundo.
+
+Teste: um loop garantindo que TODO item de AdminMenu::items() tem
+'icon' preenchido, e que a sidebar renderizada contém '<svg'. Sem isso,
+item novo acrescentado numa task futura entra sem ícone e desalinha a
+lista inteira.
+
 
 3. SIDEBAR DO LAVA-RÁPIDO
 --------------------------------
@@ -203,6 +240,7 @@ COMMITS SUGERIDOS PARA ESTA TASK
 -------------------------------------
   1. "feat(layout): layouts base do admin e do painel do lava-rápido"
   2. "feat(layout): sidebar do admin com contadores de pendência"
+  2.1 "feat(layout): ícone em cada item do menu do admin"
   3. "feat(layout): sidebar do lava-rápido condicional por produto ativo (CarWashPanelMenu + testes unitários)"
   4. "feat(ui): componentes reutilizáveis (card, stat-tile, data-table, empty-state, confirm-modal, form-field)"
   5. "feat(layout): dashboard do admin"

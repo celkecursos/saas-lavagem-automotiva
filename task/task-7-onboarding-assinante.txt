@@ -39,6 +39,50 @@ Tela pública /planos, lista plans onde active = true:
   - lista de plan_features ativos do plano (ordenada por sort_order) —
     vantagens de marketing gerenciadas pelo admin, ver task-11.
 
+2.1 SEED DOS PLANOS (3 NÍVEIS)
+- - - - - - - - - - - - - - - - -
+A vitrine com um plano só não comunica nada — o assinante não tem com o
+que comparar e a tela fica visualmente torta. Criar um PlanSeeder
+dedicado com os 3 níveis clássicos (entrada / mais vendido / topo):
+
+  Essencial  R$  49,90   4 lavagens/mês   sem rollover   máx 1/dia
+  Completo   R$  89,90   8 lavagens/mês   com rollover   máx 2/dia
+  Premium    R$ 149,90  16 lavagens/mês   com rollover   máx 3/dia
+
+Cada um com 4 a 6 plan_features (as vantagens de marketing da seção
+acima), semeadas junto no mesmo seeder.
+
+Detalhes que importam:
+  - updateOrCreate(['slug' => ...]) e NÃO create(): rodar o seeder de
+    novo corrige preço/cota sem duplicar plano nem quebrar assinaturas
+    que já apontam pro plan_id antigo.
+  - As features são recriadas do zero a cada execução
+    ($plan->features()->delete() antes de inserir) — plan_features é
+    puramente descritivo, não é Auditable e não tem nada apontando pra
+    ele, então recriar é seguro.
+  - Registrar PlanSeeder no DatabaseSeeder ANTES do UserSeeder: o
+    UserSeeder (task-23) precisa do plano "essencial" pra criar a
+    assinatura de demonstração da Gabrielly. O firstOrCreate que já
+    existe lá dentro vira só rede de segurança pra quem rodar aquele
+    seeder isolado.
+
+DESTAQUE DO PLANO "MAIS VENDIDO": é decisão de VIEW, não coluna no
+banco. A vitrine destaca o plano do meio com
+
+  $featuredIndex = $plans->count() >= 3 ? intdiv($plans->count() - 1, 2) : null;
+
+Com menos de 3 planos ninguém ganha destaque (card gigante sozinho na
+tela fica pior que card nenhum). Só criar uma coluna 'featured' na
+tabela plans se o admin realmente precisar escolher qual destacar — o
+que não é requisito da v1.
+
+ARMADILHA NOS TESTES: assim que o seeder passa a criar planos e
+features, qualquer teste que assuma tabela vazia quebra. Os dois casos
+reais foram PlanFeature::sole() e PlanFeature::count() === 0 em
+tests/Feature/AdminPlanFeatureManagementTest.php — a correção é escopar
+ao plano do teste ($plan->features()->sole() e $plan->features()->count()),
+que é o que a assertiva realmente queria dizer.
+
 Se o usuário não estiver logado e clicar "Assinar": redireciona pro
 login/registro e volta pro checkout do plano escolhido depois (mesmo
 padrão de redirect seguro descrito na experiência do Celke Payments —
@@ -205,6 +249,7 @@ COMMITS SUGERIDOS PARA ESTA TASK
   2. "feat(subscriber): cadastro self-service do assinante"
   3. "feat(subscriber): vitrine de planos e checkout"
      (integra com PaymentGatewayFactory da task-4)
+  3.1 "feat(subscriber): PlanSeeder com os 3 planos da vitrine e suas vantagens"
   4. "feat(subscriber): ativação de assinatura e primeiro ciclo via webhook"
   5. "feat(subscriber): comando subscriptions:renew com cartão salvo (chargeSavedMethod)"
   6. "feat(subscriber): troca de plano agendada pro próximo ciclo"

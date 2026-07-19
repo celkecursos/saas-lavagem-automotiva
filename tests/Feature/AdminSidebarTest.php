@@ -61,6 +61,19 @@ test('item aparece so pra quem tem a permission correspondente', function () {
     expect(renderAdminSidebar())->not->toContain('Lava-rápidos');
 });
 
+test('todo item do menu tem icone e a sidebar renderiza o svg', function () {
+    $this->seed(DatabaseSeeder::class);
+    $user = User::factory()->create();
+    $user->assignRole('Super Admin');
+    $this->actingAs($user);
+
+    foreach (\App\Support\AdminMenu::items() as $item) {
+        expect($item['icon'] ?? '')->not->toBeEmpty("item '{$item['label']}' sem icone");
+    }
+
+    expect(renderAdminSidebar())->toContain('<svg');
+});
+
 test('badge de pendencia mostra o contador quando ha registros pending', function () {
     $this->seed(DatabaseSeeder::class);
     Route::get('/admin/ativacoes-teste', fn () => 'ok')
