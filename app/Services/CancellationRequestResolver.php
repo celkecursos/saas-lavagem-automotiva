@@ -3,14 +3,15 @@
 namespace App\Services;
 
 use App\Models\CancellationRequest;
+use App\Models\ParkingSession;
 use App\Models\Payout;
-use App\Models\WashRedemption;
 use App\Models\User;
+use App\Models\WashRedemption;
 
 /**
  * Aprovação/rejeição de cancellation_requests pelo admin (task-9,
- * seção 3.2). Hoje só WashRedemption é requestable; ParkingSession
- * entra na task-10 reaproveitando a mesma estrutura polimórfica.
+ * seção 3.2; ParkingSession reaproveitando a mesma estrutura
+ * polimórfica desde a task-10, seção 4.1).
  */
 class CancellationRequestResolver
 {
@@ -24,6 +25,8 @@ class CancellationRequestResolver
 
         if ($request->requestable_type === WashRedemption::class) {
             $this->approveWashRedemptionCancellation($request->requestable);
+        } elseif ($request->requestable_type === ParkingSession::class) {
+            $this->approveParkingSessionCancellation($request->requestable);
         }
     }
 
@@ -44,6 +47,17 @@ class CancellationRequestResolver
 
         $this->refundQuotaIfStillCurrentCycle($redemption);
         $this->detachFromPayoutIfStillEditable($redemption);
+    }
+
+    /**
+     * Sem repasse da plataforma envolvido no estacionamento (o dinheiro
+     * vai direto pro lava-rápido) — aprovar só corrige o registro pra
+     * fins de relatório/auditoria, não movimenta nenhum valor entre
+     * contas (task-10, seção 4.1).
+     */
+    private function approveParkingSessionCancellation(ParkingSession $session): void
+    {
+        $session->update(['status' => 'canceled']);
     }
 
     /**

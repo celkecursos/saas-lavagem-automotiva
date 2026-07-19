@@ -28,7 +28,15 @@ class ParkingExitController extends Controller
             ->latest('entry_at')
             ->get() ?? collect();
 
-        return view('panel.parking.exit', compact('sessions'));
+        // Fechadas recentemente — pra permitir solicitar cancelamento
+        // de fechamento errado (task-10, seção 4.1).
+        $recentlyClosed = $parkingLot?->sessions()
+            ->where('status', 'closed')
+            ->latest('exit_at')
+            ->limit(10)
+            ->get() ?? collect();
+
+        return view('panel.parking.exit', compact('sessions', 'recentlyClosed'));
     }
 
     public function store(Request $request, ParkingSession $parkingSession, ParkingSessionService $service): RedirectResponse

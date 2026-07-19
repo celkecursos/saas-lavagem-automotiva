@@ -42,4 +42,33 @@
             </tr>
         @endforeach
     </x-data-table>
+
+    <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100 mt-8 mb-3">Fechadas recentemente</h2>
+
+    <x-data-table :rows="$recentlyClosed" empty-message="Nenhuma sessão fechada ainda">
+        <x-slot:head>
+            <x-data-table.th>Placa</x-data-table.th>
+            <x-data-table.th>Valor</x-data-table.th>
+            <x-data-table.th>Saída</x-data-table.th>
+            <x-data-table.th></x-data-table.th>
+        </x-slot:head>
+
+        @foreach ($recentlyClosed as $session)
+            <tr>
+                <td class="px-4 py-3 font-mono">{{ $session->plate }}</td>
+                <td class="px-4 py-3">R$ {{ number_format($session->amount_charged_cents / 100, 2, ',', '.') }}</td>
+                <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ $session->exit_at->format('d/m/Y H:i') }}</td>
+                <td class="px-4 py-3">
+                    <x-confirm-modal :action="route('panel.parking.request-cancellation', $session)"
+                                     title="Solicitar cancelamento desta sessão?"
+                                     message="Um admin vai analisar o pedido antes de decidir."
+                                     confirm-label="Enviar solicitação">
+                        <x-slot:trigger><button type="button" class="text-sm text-red-600 dark:text-red-400 hover:underline cursor-pointer">Solicitar cancelamento</button></x-slot:trigger>
+                        <textarea name="reason" rows="2" required placeholder="Motivo (obrigatório)"
+                                  class="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-backgroundthirddark text-sm text-gray-900 dark:text-gray-100"></textarea>
+                    </x-confirm-modal>
+                </td>
+            </tr>
+        @endforeach
+    </x-data-table>
 @endsection
