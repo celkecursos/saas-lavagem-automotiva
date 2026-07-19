@@ -83,6 +83,36 @@ class WashRedemptionService
         }
     }
 
+    /**
+     * Confirmação pelo funcionário no local (task-8, seção 2, passo 4)
+     * — só aqui a cota é efetivamente debitada.
+     *
+     * @throws WashRedemptionValidationException
+     */
+    public function confirm(CarWash $carWash, string $code, int $confirmedByUserId): WashRedemption
+    {
+        $redemption = WashRedemption::where('confirmation_code', $code)
+            // Nunca aceita código de outro lava-rápido (task-8, §2, passo 4).
+            ->where('car_wash_id', $carWash->id)
+            ->where('status', 'requested')
+            ->where('code_expires_at', '>', now())
+            ->first();
+
+        if ($redemption === null) {
+            throw new WashRedemptionValidationException('Código inválido, já usado ou expirado.');
+        }
+
+        $redemption->update([
+            'status' => 'completed',
+            'redeemed_at' => now(),
+            'confirmed_by_user_id' => $confirmedByUserId,
+        ]);
+
+        $redemption->subscriptionCycle()->increment('quota_used');
+
+        return $redemption;
+    }
+
     private static function generateCode(): string
     {
         do {

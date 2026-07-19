@@ -11,6 +11,7 @@ use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ProductController as PanelProductController;
 use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
 use App\Http\Controllers\Panel\TeamController as PanelTeamController;
+use App\Http\Controllers\Panel\WashConfirmationController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
@@ -179,6 +180,12 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
     // Equipe (task-5, seção 6) — owner convida, employee não.
     Route::get('/equipe', [PanelTeamController::class, 'index'])->name('panel.team.index');
     Route::post('/equipe/convidar', [PanelTeamController::class, 'invite'])->name('panel.team.invite');
+
+    // Confirmar lavagem (task-8, seção 4).
+    Route::get('/confirmar-lavagem', [WashConfirmationController::class, 'show'])
+        ->name('panel.washes.confirm');
+    Route::post('/confirmar-lavagem', [WashConfirmationController::class, 'confirm'])
+        ->name('panel.washes.confirm.store');
 });
 
 // Aceite público de convite de equipe (task-5, seção 6).
