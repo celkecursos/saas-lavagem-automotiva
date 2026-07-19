@@ -21,8 +21,10 @@ use App\Http\Controllers\Admin\PlanFeatureController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\LoyaltyController;
+use App\Http\Controllers\PageController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ParkingEntryController;
@@ -54,9 +56,14 @@ use App\Http\Controllers\WashController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::get('/', [HomeController::class, 'index'])->name('home');
+
+// Páginas institucionais (task-12, seção 3).
+Route::get('/sobre', [PageController::class, 'about'])->name('about');
+Route::get('/termos-de-uso', [PageController::class, 'terms'])->name('terms');
+Route::get('/privacidade', [PageController::class, 'privacy'])->name('privacy');
+Route::get('/contato', [PageController::class, 'contact'])->name('contact');
+Route::get('/sitemap.xml', [PageController::class, 'sitemap'])->name('sitemap');
 
 // Cadastro self-service do lava-rápido (task-5, seção 2).
 Route::middleware('guest')->group(function () {
