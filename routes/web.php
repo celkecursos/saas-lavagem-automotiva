@@ -20,6 +20,7 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ParkingEntryController;
+use App\Http\Controllers\Panel\ParkingBillingChargeController;
 use App\Http\Controllers\Panel\ParkingCancellationRequestController;
 use App\Http\Controllers\Panel\ParkingExitController;
 use App\Http\Controllers\Panel\ParkingLotController;
@@ -341,6 +342,9 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
         Route::post('/{parking_session}/saida', [ParkingExitController::class, 'store'])->name('panel.parking.exit.store');
         Route::post('/{parking_session}/solicitar-cancelamento', [ParkingCancellationRequestController::class, 'store'])
             ->name('panel.parking.request-cancellation');
+        Route::get('/cobrancas', [ParkingBillingChargeController::class, 'index'])->name('panel.parking.charges.index');
+        Route::get('/cobrancas/{charge}/pagar', [ParkingBillingChargeController::class, 'checkout'])->name('panel.parking.charges.checkout');
+        Route::post('/cobrancas/{charge}/pagar', [ParkingBillingChargeController::class, 'pay'])->name('panel.parking.charges.pay');
     });
 });
 

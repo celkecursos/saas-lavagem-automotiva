@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Models\ParkingBillingCharge;
 use App\Models\PaymentGateway;
 use App\Models\PaymentGatewayType;
 use App\Models\PaymentWebhookEvent;
@@ -74,6 +75,12 @@ class PaymentWebhookController extends Controller
 
         if ($result->status === 'paid' && $order->payable_type === Subscription::class) {
             SubscriptionActivator::activateFromInitialOrder($order);
+        }
+
+        // Espelha o status do order na cobrança de estacionamento
+        // (task-10, seção 5, passo 7).
+        if ($order->payable_type === ParkingBillingCharge::class) {
+            $order->payable?->update(['status' => $result->status]);
         }
 
         return response()->json(['message' => 'ok']);

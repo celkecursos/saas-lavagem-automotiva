@@ -3,8 +3,10 @@
 namespace App\Services\Parking;
 
 use App\Models\CarWash;
+use App\Models\Order;
 use App\Models\ParkingBillingCharge;
 use App\Models\ParkingBillingSetting;
+use App\Notifications\ParkingBillingChargeGenerated;
 use Illuminate\Support\Carbon;
 
 /**
@@ -66,12 +68,36 @@ class ParkingBillingEvaluationService
         $sessionsRevenue = (int) $this->closedSessionsRevenue($carWash, $periodStart, $periodEnd);
         $feeAmountCents = (int) round($sessionsRevenue * ($settings->fee_percentage / 100));
 
-        ParkingBillingCharge::create([
+        $charge = ParkingBillingCharge::create([
             ...$chargeData,
             'fee_percentage_applied' => $settings->fee_percentage,
             'fee_amount_cents' => $feeAmountCents,
             'status' => 'pending',
         ]);
+
+        // Order pendente vinculado à charge — o dono do lava-rápido paga
+        // depois pelo MESMO checkout embedded da task-4 (a cobrança não
+        // acontece sozinha aqui: não há cartão disponível num comando
+        // rodando em background, ver task-10, seção 5, passo 6).
+        $owner = $carWash->users()->wherePivot('role', 'owner')->first();
+
+        if ($owner === null) {
+            return;
+        }
+
+        $order = Order::create([
+            'user_id' => $owner->id,
+            'payable_type' => ParkingBillingCharge::class,
+            'payable_id' => $charge->id,
+            'amount_cents' => $feeAmountCents,
+            'currency' => 'BRL',
+            'recurring_type' => null,
+            'status' => 'pending',
+        ]);
+
+        $charge->update(['order_id' => $order->id]);
+
+        $owner->notify(new ParkingBillingChargeGenerated($charge));
     }
 
     private function closedSessionsCount(CarWash $carWash, Carbon $periodStart, Carbon $periodEnd): int
