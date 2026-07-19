@@ -20,6 +20,8 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ParkingEntryController;
+use App\Http\Controllers\Admin\ParkingBillingChargeController as AdminParkingBillingChargeController;
+use App\Http\Controllers\Admin\ParkingBillingSettingController;
 use App\Http\Controllers\Panel\ParkingBillingChargeController;
 use App\Http\Controllers\Panel\ParkingCancellationRequestController;
 use App\Http\Controllers\Panel\ParkingExitController;
@@ -283,6 +285,16 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     // ativar sem querer ao editar outra coisa (task-4, seção 4).
     Route::post('/gateways-pagamento/{payment_gateway}/ativar', [PaymentGatewayController::class, 'activate'])
         ->middleware('permission:payment-gateways.activate')->name('payment-gateways.activate');
+
+    // Monetização do estacionamento (task-10, seção 8).
+    Route::get('/configuracoes-estacionamento', [ParkingBillingSettingController::class, 'edit'])
+        ->middleware('permission:parking-billing-settings.edit')->name('parking-billing-settings.edit');
+    Route::put('/configuracoes-estacionamento', [ParkingBillingSettingController::class, 'update'])
+        ->middleware('permission:parking-billing-settings.edit')->name('parking-billing-settings.update');
+    Route::get('/cobrancas-estacionamento', [AdminParkingBillingChargeController::class, 'index'])
+        ->middleware('permission:parking-billing-charges.index')->name('parking-billing-charges.index');
+    Route::get('/cobrancas-estacionamento/{parking_billing_charge}', [AdminParkingBillingChargeController::class, 'show'])
+        ->middleware('permission:parking-billing-charges.index')->name('parking-billing-charges.show');
 });
 
 // Painel do lava-rápido (URLs em /painel, ver convenção de idioma).
