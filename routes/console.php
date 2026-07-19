@@ -12,3 +12,6 @@ Artisan::command('inspire', function () {
 // scheduler rodando de verdade (schedule:work em dev, supervisor/cron
 // em produção), não basta o comando existir.
 Schedule::command('subscriptions:renew')->daily();
+
+// Expiração de códigos de resgate vencidos (task-8, seção 2, passo 5).
+Schedule::command('wash-redemptions:expire')->everyMinute();
