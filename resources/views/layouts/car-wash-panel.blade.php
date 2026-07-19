@@ -39,6 +39,7 @@
                     @include('layouts.partials.car-wash-selector')
                 </div>
                 <div class="flex items-center gap-4">
+                    <x-notification-bell />
                     <x-theme-toggle />
                     @auth
                         <span class="text-sm text-gray-400 md:text-gray-600 md:dark:text-gray-300">{{ auth()->user()->name }}</span>

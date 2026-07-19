@@ -15,6 +15,7 @@
             <nav class="flex items-center gap-4 text-sm text-gray-400">
                 {{-- Visível inclusive deslogado — a home é a página mais
                      vista/gravada em vídeo (task-18, seção 3). --}}
+                <x-notification-bell />
                 <x-theme-toggle class="text-gray-400 hover:text-gray-200 md:text-gray-400 md:hover:text-gray-200" />
                 @if (Route::has('login'))
                     <a href="{{ route('login') }}" class="hover:text-gray-200">Entrar</a>

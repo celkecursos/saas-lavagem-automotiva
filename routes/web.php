@@ -36,6 +36,7 @@ use App\Http\Controllers\Panel\WashConfirmationController;
 use App\Http\Controllers\Panel\WashHistoryController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\RegisterCarWashController;
@@ -98,6 +99,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+});
+
+// Sino de notificações — qualquer usuário autenticado (admin, painel do
+// lava-rápido, assinante), independente da área (task-19, seção 4).
+Route::middleware('auth')->group(function () {
+    Route::get('/notificacoes', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notificacoes/{id}/marcar-lida', [NotificationController::class, 'markAsRead'])
+        ->name('notifications.mark-read');
+    Route::post('/notificacoes/marcar-todas-lidas', [NotificationController::class, 'markAllAsRead'])
+        ->name('notifications.mark-all-read');
 });
 
 // Checkout embedded do clube de assinatura (task-4, seção 5.3; POST
