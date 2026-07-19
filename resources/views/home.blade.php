@@ -102,6 +102,12 @@
                     </x-card>
                 @endforeach
             </div>
+
+            @if (Route::has('ranking'))
+                <p class="text-center mt-8">
+                    <a href="{{ route('ranking') }}" class="text-blue-600 dark:text-blue-400 hover:underline">Veja o ranking completo →</a>
+                </p>
+            @endif
         @endif
     </section>
 

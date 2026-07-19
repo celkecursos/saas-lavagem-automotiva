@@ -46,6 +46,7 @@ class PageController extends Controller
             route('terms'),
             route('privacy'),
             route('contact'),
+            route('ranking'),
         ];
 
         $xml = view('sitemap', compact('urls'))->render();

@@ -25,6 +25,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\LoyaltyController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\RankingController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
 use App\Http\Controllers\Panel\ParkingEntryController;
@@ -64,6 +65,9 @@ Route::get('/termos-de-uso', [PageController::class, 'terms'])->name('terms');
 Route::get('/privacidade', [PageController::class, 'privacy'])->name('privacy');
 Route::get('/contato', [PageController::class, 'contact'])->name('contact');
 Route::get('/sitemap.xml', [PageController::class, 'sitemap'])->name('sitemap');
+
+// Ranking público "Lava-rápido do mês" (task-17).
+Route::get('/ranking', [RankingController::class, 'index'])->name('ranking');
 
 // Cadastro self-service do lava-rápido (task-5, seção 2).
 Route::middleware('guest')->group(function () {
