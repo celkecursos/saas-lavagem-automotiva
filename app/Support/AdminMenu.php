@@ -110,6 +110,18 @@ class AdminMenu
                 'permission' => 'audits.index',
                 'badge' => null,
             ],
+            [
+                'label' => 'Papéis',
+                'route' => 'roles.index',
+                'permission' => 'roles.index',
+                'badge' => null,
+            ],
+            [
+                'label' => 'Permissões',
+                'route' => 'permissions.index',
+                'permission' => 'permissions.index',
+                'badge' => null,
+            ],
         ];
     }
 }
