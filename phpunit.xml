@@ -24,6 +24,12 @@
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="DB_DATABASE" value="testing"/>
+        <!-- Testes que exercitam caminho de erro (401 do PagBank, checkout
+             sem gateway) gravavam no mesmo storage/logs/laravel.log do
+             ambiente de desenvolvimento, e as linhas "testing.ERROR"
+             apareciam como se fossem falha real da aplicação. Log::spy()
+             continua funcionando: troca a facade, não depende do canal. -->
+        <env name="LOG_CHANNEL" value="null"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

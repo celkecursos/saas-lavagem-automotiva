@@ -107,7 +107,11 @@ test('usuario com assinatura ativa nao consegue assinar outro plano', function (
 
     $this->actingAs($user)
         ->postJson("/planos/{$plan->slug}/assinar", ['encrypted_card' => 'blob'])
-        ->assertStatus(422);
+        ->assertStatus(422)
+        // O JS do checkout exibe este 'message' na tela; sem ele o usuário
+        // via só "Não foi possível processar o pagamento" e ia procurar
+        // problema no cartão em vez da assinatura que já tem.
+        ->assertJson(['message' => 'Você já tem uma assinatura ativa. Cancele ou troque de plano antes de assinar outro.']);
 
     expect(Subscription::count())->toBe(1);
 });

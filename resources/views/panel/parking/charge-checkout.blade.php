@@ -71,7 +71,21 @@
                 const data = await response.json();
                 window.location.href = data.redirect ?? '/';
             } else {
-                errorBox.textContent = 'Não foi possível processar o pagamento. Tente novamente.';
+                // Mesmo critério do checkout de assinatura: mostra o motivo
+                // que a API devolveu; o genérico só quando não vem JSON.
+                let message = 'Não foi possível processar o pagamento. Tente novamente.';
+
+                try {
+                    const data = await response.json();
+
+                    if (data.message) {
+                        message = data.message;
+                    }
+                } catch (error) {
+                    // Resposta sem corpo JSON: fica a mensagem genérica.
+                }
+
+                errorBox.textContent = message;
                 errorBox.classList.remove('hidden');
             }
         });

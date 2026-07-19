@@ -26,15 +26,67 @@
                      vista/gravada em vídeo (task-18, seção 3). --}}
                 <x-notification-bell />
                 <x-theme-toggle class="text-gray-400 hover:text-white md:text-gray-400 md:hover:text-white" />
-                @if (Route::has('login'))
-                    <a href="{{ route('login') }}" class="hidden sm:inline transition hover:text-white">Entrar</a>
-                @endif
-                @if (Route::has('plans.index'))
-                    <a href="{{ route('plans.index') }}"
-                       class="hidden sm:inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600">
-                        Assinar agora
-                    </a>
-                @endif
+
+                @auth
+                    {{-- Menu do usuário logado: só o primeiro nome, pra não
+                         estourar a largura do header com nome composto. O
+                         <x-dropdown> do Breeze não serve aqui — ele é claro
+                         (bg-white) e o header é escuro. --}}
+                    <div class="relative hidden sm:block" x-data="{ userMenu: false }" @click.outside="userMenu = false">
+                        <button type="button" @click="userMenu = ! userMenu"
+                                class="flex items-center gap-2 transition hover:text-white">
+                            <span class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 text-xs font-bold text-white">
+                                {{ mb_strtoupper(mb_substr(auth()->user()->name, 0, 1)) }}
+                            </span>
+                            <span>{{ \Illuminate\Support\Str::before(trim(auth()->user()->name), ' ') }}</span>
+                            <svg class="h-4 w-4 transition-transform duration-200" :class="userMenu && 'rotate-180'"
+                                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+
+                        <div x-show="userMenu" x-cloak
+                             class="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-backgroundseconddark">
+                            <p class="truncate border-b border-gray-100 px-4 py-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                                {{ auth()->user()->email }}
+                            </p>
+
+                            {{-- /dashboard já resolve o destino conforme o
+                                 perfil: admin -> /admin, lava-rápido ->
+                                 /painel, assinante -> /assinatura. --}}
+                            <a href="{{ route('dashboard') }}"
+                               class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-backgroundthirddark">
+                                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                                </svg>
+                                Dashboard
+                            </a>
+
+                            @if (Route::has('logout'))
+                                <form method="POST" action="{{ route('logout') }}">
+                                    @csrf
+                                    <button type="submit"
+                                            class="flex w-full items-center gap-2.5 border-t border-gray-100 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-backgroundthirddark">
+                                        <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                                        </svg>
+                                        Sair
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+                @else
+                    @if (Route::has('login'))
+                        <a href="{{ route('login') }}" class="hidden sm:inline transition hover:text-white">Entrar</a>
+                    @endif
+                    @if (Route::has('plans.index'))
+                        <a href="{{ route('plans.index') }}"
+                           class="hidden sm:inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600">
+                            Assinar agora
+                        </a>
+                    @endif
+                @endauth
 
                 <button type="button" class="md:hidden text-gray-400 hover:text-white" @click="mobile = ! mobile" aria-label="Abrir menu">
                     <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
@@ -51,9 +103,24 @@
             <a href="{{ Route::has('plans.index') ? route('plans.index') : url('/#planos') }}" class="block rounded px-2 py-2 hover:bg-white/5 hover:text-white">Planos</a>
             <a href="{{ url('/#lava-rapidos') }}" class="block rounded px-2 py-2 hover:bg-white/5 hover:text-white">Lava-rápidos</a>
             <a href="{{ url('/#faq') }}" class="block rounded px-2 py-2 hover:bg-white/5 hover:text-white">FAQ</a>
-            @if (Route::has('login'))
-                <a href="{{ route('login') }}" class="block rounded px-2 py-2 hover:bg-white/5 hover:text-white sm:hidden">Entrar</a>
-            @endif
+            @auth
+                <div class="mt-2 border-t border-white/5 pt-2">
+                    <p class="px-2 py-1 text-xs text-gray-600">
+                        {{ \Illuminate\Support\Str::before(trim(auth()->user()->name), ' ') }} — {{ auth()->user()->email }}
+                    </p>
+                    <a href="{{ route('dashboard') }}" class="block rounded px-2 py-2 hover:bg-white/5 hover:text-white">Dashboard</a>
+                    @if (Route::has('logout'))
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" class="block w-full rounded px-2 py-2 text-left hover:bg-white/5 hover:text-white">Sair</button>
+                        </form>
+                    @endif
+                </div>
+            @else
+                @if (Route::has('login'))
+                    <a href="{{ route('login') }}" class="block rounded px-2 py-2 hover:bg-white/5 hover:text-white sm:hidden">Entrar</a>
+                @endif
+            @endauth
         </nav>
     </header>
 

@@ -408,6 +408,32 @@ do push — pega regressão mesmo se alguém esquecer de testar antes de
 commitar.
 
 
+LOG DOS TESTES SEPARADO DO LOG DE DESENVOLVIMENTO
+-----------------------------------------------------------
+Vários testes exercitam caminho de erro de propósito (401 do PagBank via
+Http::fake, checkout sem gateway ativo) e esses caminhos chamam
+Log::warning/Log::error. Sem configuração, isso vai parar no MESMO
+storage/logs/laravel.log do ambiente de desenvolvimento, e as linhas
+aparecem assim:
+
+  [.....] testing.ERROR: Checkout sem gateway de pagamento ativo... {"plan_id":360,"user_id":675}
+
+Quem abre o log procurando um erro real perde tempo investigando uma
+falha que nunca existiu. Aconteceu em 19/07/2026 exatamente assim.
+
+Acrescentar em phpunit.xml:
+
+  <env name="LOG_CHANNEL" value="null"/>
+
+Log::spy()/Log::shouldReceive continuam funcionando: eles trocam a
+facade inteira, não dependem do canal configurado.
+
+Como reconhecer que uma linha do log veio de teste, e não da aplicação:
+  - prefixo "testing." em vez de "local."
+  - IDs fora de escala com o banco de desenvolvimento (plan_id 360 num
+    banco que tem 3 planos) — factories acumulam IDs entre os testes
+
+
 COMMITS SUGERIDOS PARA ESTA TASK
 -------------------------------------
   1. "test: configura Pest e banco de testes dedicado"

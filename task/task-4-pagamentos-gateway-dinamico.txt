@@ -429,6 +429,50 @@ registro bruto/imutável do evento (log, não estado mutável).
   MENSALIDADE do assinante para a plataforma.
 
 
+ERRO DO CHECKOUT: MOSTRAR O MOTIVO, NÃO UM TEXTO GENÉRICO
+------------------------------------------------------------------
+O JS do checkout (resources/views/checkout/show.blade.php e o gêmeo em
+panel/parking/charge-checkout.blade.php) faz fetch e trata a falha assim:
+
+  } else {
+      errorBox.textContent = 'Não foi possível processar o pagamento...';
+
+Isso JOGA FORA o 'message' que a API devolveu. Na prática "você já tem
+uma assinatura ativa", "cartão recusado" e "pagamentos indisponíveis"
+viram a mesma frase na tela, e quem está testando vai procurar problema
+no cartão quando a causa era outra. Aconteceu de verdade em 19/07/2026:
+o usuário logado era o assinante de demonstração do seeder, que já tem
+subscription ativa, e o checkout parava no guard de "1 assinatura por
+vez" antes de chegar no gateway.
+
+O correto é ler o 'message' e só cair no genérico quando a resposta não
+for JSON (419 de CSRF expirado, 500 com página HTML):
+
+  let message = 'Não foi possível processar o pagamento. Tente novamente.';
+  try {
+      const data = await response.json();
+      if (data.message) { message = data.message; }
+  } catch (error) { /* sem corpo JSON: fica o genérico */ }
+  errorBox.textContent = message;
+
+E o teste do guard de assinatura ativa deve assertar o assertJson do
+'message', não só o status 422 — senão alguém remove a mensagem do
+controller e a interface regride em silêncio.
+
+DICA DE DIAGNÓSTICO: se o checkout falhar e NÃO houver linha nova em
+storage/logs/laravel.log nem registro na tabela orders, a falha foi num
+guard ANTES de chegar no gateway (assinatura já ativa, validação) — os
+dois caminhos de 503 escrevem no log, esses não escrevem.
+
+Duas coisas que também confundem nesse diagnóstico:
+  - Gateway recém-cadastrado NASCE inativo de propósito (is_active =
+    false no store); ativar é ação separada. Cadastrar a credencial e
+    ir direto pro checkout dá "Pagamento temporariamente indisponível".
+  - O sandbox_mode define a base URL (sandbox.api.pagseguro.com x
+    api.pagseguro.com). Token de produção em sandbox_mode = 1 responde
+    401 e cai na mesma tela amigável.
+
+
 COMMITS SUGERIDOS PARA ESTA TASK
 -------------------------------------
   1. "feat(payments): migrations de gateway dinâmico"

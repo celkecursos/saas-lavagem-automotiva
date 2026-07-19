@@ -4,6 +4,7 @@ use App\Models\CarWash;
 use App\Models\CarWashProductSubscription;
 use App\Models\Plan;
 use App\Models\PlanFeature;
+use App\Models\User;
 use Database\Seeders\PlanSeeder;
 
 // Ver task-12, e task-13.
@@ -58,6 +59,32 @@ test('seeder publica os 3 planos da vitrine com vantagens e destaca o do meio', 
         ->assertSee('Premium')
         // Só o plano do meio ganha o selo de destaque.
         ->assertSee('Mais vendido');
+});
+
+test('header do site mostra entrar quando deslogado', function () {
+    $response = $this->get('/');
+
+    $response->assertOk()
+        ->assertSee('Entrar')
+        ->assertSee('Assinar agora')
+        ->assertDontSee('Dashboard');
+});
+
+test('header do site mostra o primeiro nome e o menu do usuario logado', function () {
+    $user = User::factory()->create(['name' => 'Marcos Antonio da Silva', 'email' => 'marcos@exemplo.com']);
+
+    $response = $this->actingAs($user)->get('/');
+
+    $response->assertOk()
+        // Só o primeiro nome — nome composto estouraria a largura do header.
+        ->assertSee('Marcos')
+        ->assertDontSee('Marcos Antonio da Silva')
+        ->assertSee('marcos@exemplo.com')
+        ->assertSee('Dashboard')
+        ->assertSee('Sair')
+        ->assertSee(route('dashboard'), false)
+        // Some o CTA de visitante.
+        ->assertDontSee('Assinar agora');
 });
 
 test('paginas institucionais renderizam', function () {

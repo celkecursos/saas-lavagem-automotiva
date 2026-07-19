@@ -256,6 +256,17 @@ HEADER E FOOTER (layouts/public.blade.php)
   - Menu mobile de verdade: no layout original os links de navegação
     simplesmente sumiam abaixo de md, sem substituto. Botão hambúrguer
     com x-data="{ mobile: false }" abrindo a mesma lista empilhada.
+  - USUÁRIO LOGADO: trocar "Entrar" + "Assinar agora" por um menu com o
+    PRIMEIRO nome (Str::before(trim($user->name), ' ') — nome composto
+    estoura a largura do header) e um círculo com a inicial. O dropdown
+    traz o e-mail como linha de identificação, "Dashboard" e "Sair".
+    O @auth/@else cobre os dois estados, e o menu mobile repete os
+    mesmos itens.
+    O "Dashboard" aponta pra rota nomeada 'dashboard', que já resolve o
+    destino conforme o perfil (admin -> /admin, vínculo com lava-rápido
+    -> /painel, assinante -> /assinatura) — não montar esse if na view.
+    NÃO usar o <x-dropdown> do Breeze aqui: ele é claro (bg-white) e o
+    header é escuro; sai um retângulo branco no meio da navbar.
   - Footer com py-14, e o copyright numa faixa própria separada por
     border-t em vez de espremido na primeira coluna.
 

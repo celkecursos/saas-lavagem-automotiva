@@ -78,7 +78,24 @@
                 const data = await response.json();
                 window.location.href = data.redirect ?? '/';
             } else {
-                errorBox.textContent = 'Não foi possível processar o pagamento. Tente novamente.';
+                // A API já devolve o motivo real ("Você já tem uma assinatura
+                // ativa", "Pagamento recusado", "Pagamentos indisponíveis").
+                // O texto genérico só vale quando a resposta NÃO é JSON —
+                // 419 de CSRF expirado ou 500 com página HTML, onde não há
+                // mensagem nenhuma pra mostrar.
+                let message = 'Não foi possível processar o pagamento. Tente novamente.';
+
+                try {
+                    const data = await response.json();
+
+                    if (data.message) {
+                        message = data.message;
+                    }
+                } catch (error) {
+                    // Resposta sem corpo JSON: fica a mensagem genérica.
+                }
+
+                errorBox.textContent = message;
                 errorBox.classList.remove('hidden');
             }
         });
