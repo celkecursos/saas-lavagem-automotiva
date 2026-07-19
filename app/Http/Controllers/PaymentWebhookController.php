@@ -8,9 +8,13 @@ use App\Models\PaymentGateway;
 use App\Models\PaymentGatewayType;
 use App\Models\PaymentWebhookEvent;
 use App\Models\Subscription;
+use App\Notifications\ChargebackReceived;
+use App\Services\Refund\RefundService;
 use App\Services\Subscription\SubscriptionActivator;
+use App\Support\AdminRecipients;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Recebe webhooks de qualquer gateway (task-4, seção 2; task-7,
@@ -81,6 +85,20 @@ class PaymentWebhookController extends Controller
         // (task-10, seção 5, passo 7).
         if ($order->payable_type === ParkingBillingCharge::class) {
             $order->payable?->update(['status' => $result->status]);
+        }
+
+        // Chargeback chega SÓ via webhook, sem solicitação prévia
+        // (task-21, seção 3) — revoga o acesso na hora, igual ao passo
+        // 4 do reembolso self-service/admin.
+        if (in_array($result->status, ['refunded', 'chargeback'], true)) {
+            (new RefundService)->revokeAccess($order, $result->status === 'chargeback' ? 'chargeback' : 'refund');
+        }
+
+        if ($result->status === 'chargeback') {
+            Notification::send(
+                AdminRecipients::withPermission('orders.refund'),
+                new ChargebackReceived($order),
+            );
         }
 
         return response()->json(['message' => 'ok']);

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -27,6 +28,11 @@ class Order extends Model implements Auditable
     public function paymentGateway(): BelongsTo
     {
         return $this->belongsTo(PaymentGateway::class);
+    }
+
+    public function refundRequest(): HasOne
+    {
+        return $this->hasOne(OrderRefundRequest::class);
     }
 
     /**

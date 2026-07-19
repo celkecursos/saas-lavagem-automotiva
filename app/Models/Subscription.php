@@ -16,7 +16,7 @@ use OwenIt\Auditing\Contracts\Auditable;
  * users.role (task-3, seção 1). Auditable: cancelamento, upgrade/
  * downgrade de plano (task-3, seção 5).
  */
-#[Fillable(['user_id', 'plan_id', 'status', 'current_period_start', 'current_period_end', 'canceled_at', 'pending_plan_id', 'pending_renewal_discount_percent'])]
+#[Fillable(['user_id', 'plan_id', 'status', 'current_period_start', 'current_period_end', 'canceled_at', 'canceled_reason', 'pending_plan_id', 'pending_renewal_discount_percent'])]
 class Subscription extends Model implements Auditable
 {
     use HasFactory;
