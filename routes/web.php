@@ -19,6 +19,8 @@ use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
 use App\Http\Controllers\Panel\DashboardController as PanelDashboardController;
+use App\Http\Controllers\Panel\ParkingLotController;
+use App\Http\Controllers\Panel\ParkingRateController;
 use App\Http\Controllers\Panel\PayoutController as PanelPayoutController;
 use App\Http\Controllers\Panel\ProductController as PanelProductController;
 use App\Http\Controllers\Panel\RegistrationController as PanelRegistrationController;
@@ -322,6 +324,15 @@ Route::middleware(['auth', 'car-wash'])->prefix('painel')->group(function () {
     // Repasses recebidos (task-9, seção 4).
     Route::get('/repasses', [PanelPayoutController::class, 'index'])->name('panel.payouts.index');
     Route::get('/repasses/{payout}', [PanelPayoutController::class, 'show'])->name('panel.payouts.show');
+
+    // Módulo de estacionamento (task-10) — restrito a quem tem o
+    // produto 'estacionamento' ativo.
+    Route::middleware('parking-active')->prefix('estacionamento')->group(function () {
+        Route::get('/', [ParkingLotController::class, 'show'])->name('panel.parking.sessions.index');
+        Route::post('/', [ParkingLotController::class, 'store'])->name('panel.parking.lot.store');
+        Route::get('/tarifas', [ParkingRateController::class, 'index'])->name('panel.parking.rates.index');
+        Route::post('/tarifas', [ParkingRateController::class, 'store'])->name('panel.parking.rates.store');
+    });
 });
 
 // Aceite público de convite de equipe (task-5, seção 6).

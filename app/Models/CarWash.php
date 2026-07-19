@@ -47,6 +47,11 @@ class CarWash extends Model implements Auditable
         return $this->hasMany(CarWashProductSubscription::class);
     }
 
+    public function parkingLots(): HasMany
+    {
+        return $this->hasMany(ParkingLot::class);
+    }
+
     protected function casts(): array
     {
         return [

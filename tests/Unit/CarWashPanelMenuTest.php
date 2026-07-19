@@ -47,15 +47,17 @@ test('Equipe so aparece pra owner, nunca pra employee', function () {
 });
 
 test('renderable filtra rotas ainda nao registradas sem quebrar', function () {
-    // panel.washes.confirm já existe (task-8); panel.parking.* ainda
-    // não (task-10) — o filtro Route::has() só deixa passar o que já
-    // está registrado, sem RouteNotFoundException (proteção da task-14).
+    // panel.washes.confirm (task-8) e panel.parking.sessions.index/
+    // rates.index (task-10) já existem; panel.parking.report/
+    // charges.index ainda não — o filtro Route::has() só deixa passar
+    // o que já está registrado, sem RouteNotFoundException (proteção
+    // da task-14).
     $items = CarWashPanelMenu::renderableItemsFor(['clube_lavagem', 'estacionamento'], 'owner');
 
     foreach ($items as $item) {
         expect(Route::has($item['route']))->toBeTrue();
     }
 
-    expect(array_column($items, 'label'))->toContain('Confirmar lavagem')
-        ->not->toContain('Estacionamento');
+    expect(array_column($items, 'label'))->toContain('Confirmar lavagem', 'Estacionamento', 'Tarifas')
+        ->not->toContain('Relatório', 'Cobranças');
 });
