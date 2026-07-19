@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\OrderRefundRequestController;
 use App\Http\Controllers\Admin\RefundSettingController;
 use App\Http\Controllers\Admin\PlanFeatureController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Panel\CarWashSwitchController;
@@ -207,6 +208,18 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         ->middleware('permission:users.index')->name('subscriptions.index');
     Route::get('/assinantes/{subscription}', [AdminSubscriptionController::class, 'show'])
         ->middleware('permission:users.index')->name('subscriptions.show');
+
+    // Visão central da PESSOA — não presa à assinatura (task-22).
+    Route::get('/users', [UserController::class, 'index'])
+        ->middleware('permission:users.index')->name('users.index');
+    Route::get('/users/{user}', [UserController::class, 'show'])
+        ->middleware('permission:users.show')->name('users.show');
+    Route::post('/users/{user}/suspend', [UserController::class, 'suspend'])
+        ->middleware('permission:users.suspend')->name('users.suspend');
+    Route::post('/users/{user}/reactivate', [UserController::class, 'reactivate'])
+        ->middleware('permission:users.reactivate')->name('users.reactivate');
+    Route::post('/users/{user}/resend-verification', [UserController::class, 'resendVerification'])
+        ->middleware('permission:users.show')->name('users.resend-verification');
     Route::get('/pedidos', [OrderController::class, 'index'])
         ->middleware('permission:orders.index')->name('orders.index');
     Route::get('/pedidos/{order}', [OrderController::class, 'show'])

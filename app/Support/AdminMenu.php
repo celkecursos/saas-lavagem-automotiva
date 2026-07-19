@@ -57,6 +57,12 @@ class AdminMenu
                 'badge' => null,
             ],
             [
+                'label' => 'Usuários',
+                'route' => 'users.index',
+                'permission' => 'users.index',
+                'badge' => null,
+            ],
+            [
                 'label' => 'Assinantes',
                 'route' => 'subscriptions.index',
                 'permission' => 'users.index',
