@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             PaymentGatewayTypeSeeder::class,
             PayoutPlanSeeder::class,
+            AchievementSeeder::class,
             UserSeeder::class,
         ]);
     }

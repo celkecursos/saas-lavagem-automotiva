@@ -64,6 +64,12 @@ class PermissionSeeder extends Seeder
         'permissions.destroy',
         'role-permissions.index',
         'role-permissions.update',
+        'achievements.index',
+        'achievements.create',
+        'achievements.edit',
+        'loyalty-redemptions.index',
+        'loyalty-redemptions.create',
+        'loyalty-redemptions.edit',
     ];
 
     public function run(): void

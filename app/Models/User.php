@@ -117,6 +117,21 @@ class User extends Authenticatable implements Auditable, MustVerifyEmail
         return $this->hasMany(CancellationRequest::class, 'requested_by_user_id');
     }
 
+    public function userAchievements(): HasMany
+    {
+        return $this->hasMany(UserAchievement::class);
+    }
+
+    public function loyaltyLedgerEntries(): HasMany
+    {
+        return $this->hasMany(LoyaltyPointsLedgerEntry::class);
+    }
+
+    public function loyaltyRedemptionClaims(): HasMany
+    {
+        return $this->hasMany(LoyaltyRedemptionClaim::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *
